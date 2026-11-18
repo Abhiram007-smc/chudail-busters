@@ -61,6 +61,11 @@
   .char i { display: block; font-size: 10px; letter-spacing: .1em; color: #6d675c; font-style: normal; }
   .char .who { position: absolute; top: 6px; right: 6px; display: flex; gap: 3px; }
   .char .who span { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+  .diff { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 16px; }
+  .diff button { font-size: 12px; padding: 9px 4px; letter-spacing: .15em; background: #0b0808; border-color: #3a2620; color: #8f8676; }
+  .diff button.on { background: linear-gradient(#4a0808, #2a0303); color: #f0e6cc; border-color: #a01010; box-shadow: 0 0 14px rgba(160,0,0,.4); }
+  .diff .tip { grid-column: 1 / -1; font-size: 11px; color: #6d675c; letter-spacing: .05em; }
+  #floorTag { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: 'Butcherman', serif; letter-spacing: .3em; font-size: 15px; color: #b9ae96; text-shadow: 0 0 10px #000; }
   .share { font-size: 13px; color: #8f8676; background: #0b0808; border: 1px dashed #3a2620; padding: 10px 12px; margin: 12px 0 18px; line-height: 1.7; word-break: break-all; }
   .share code { color: #e8c45a; font-family: inherit; font-size: 15px; }
 
@@ -177,6 +182,8 @@
   <div class="panel">
     <label>Survivors <span id="pcount"></span></label>
     <ul class="plist" id="plist"></ul>
+    <label>Difficulty</label>
+    <div class="diff" id="diff"></div>
     <label>Choose your survivor</label>
     <div class="chars" id="chars"></div>
     <div class="share" id="share">Loading invite link…</div>
@@ -190,8 +197,9 @@
 <div id="loading" class="screen"><p>DESCENDING</p></div>
 
 <div id="hud">
-  <div id="effigies">EFFIGIES<div class="icons" id="icons"></div><div id="objective">Find the bone effigies. Stay quiet.</div><div id="clues"></div></div>
+  <div id="effigies">THE STAR<div class="icons" id="icons"></div><div id="objective">Find the bone effigies. Stay quiet.</div><div id="clues"></div></div>
   <div id="team"></div>
+  <div id="floorTag"></div>
   <div id="bars">
     FLASHLIGHT<div class="bar" id="battery"><i></i></div>
     STAMINA<div class="bar" id="stamina"><i></i></div>
