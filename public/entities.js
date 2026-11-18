@@ -290,7 +290,7 @@ export function createMonster({ ghost = false } = {}) {
       anim.tiltTarget = Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4) : (Math.random() - 0.5) * 0.4;
       anim.turnTarget = (Math.random() - 0.5) * (chase ? 0.4 : 1.2);
     }
-    if (state === 'stall') anim.tiltTarget = 1.5;
+    if (state === 'stall') anim.tiltTarget = 0.75;
     anim.tilt += (anim.tiltTarget - anim.tilt) * Math.min(1, dt * 18);
     anim.turn += (anim.turnTarget - anim.turn) * Math.min(1, dt * 14);
     head.rotation.z = anim.tilt; head.rotation.y = anim.turn;
@@ -361,7 +361,7 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
       anim.tiltTarget = Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4) : (Math.random() - 0.5) * 0.4;
       anim.turnTarget = (Math.random() - 0.5) * (chase ? 0.4 : 1.2);
     }
-    if (stall || sniff) anim.tiltTarget = sniff ? Math.sin(t * 1.5) * 1.3 : 1.5;
+    if (stall || sniff) anim.tiltTarget = sniff ? Math.sin(t * 1.5) * 0.7 : 0.75;
     anim.tilt += (anim.tiltTarget - anim.tilt) * Math.min(1, dt * 18);
     anim.turn += (anim.turnTarget - anim.turn) * Math.min(1, dt * 14);
     if (stun) { anim.tilt = Math.sin(t * 45) * 0.5; anim.turn = Math.sin(t * 37) * 0.4; }
