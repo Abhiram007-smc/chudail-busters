@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
@@ -355,6 +355,8 @@ function startGame(m) {
 
 function buildGame(m) {
   const map = (S.map = generateMap(m.seed));
+  S.mapBad = m.sig != null && mapSignature(map) !== m.sig;
+  if (S.mapBad) console.error('map out of sync with the server', mapSignature(map), m.sig);
   const scene = (S.scene = new THREE.Scene());
   scene.background = new THREE.Color(0x000000);
   scene.fog = new THREE.FogExp2(0x000000, 0.072);
@@ -457,6 +459,7 @@ function buildGame(m) {
   $('resume').querySelector('h2').textContent = 'CLICK TO ENTER';
   if (!S.spectator) showBriefing(); else $('brief').style.display = 'none';
   if (!S.spectator) setTimeout(() => {
+    if (S.mapBad) { message('This page is out of date with the server. Refresh the page (Ctrl/Cmd + Shift + R).', 'red'); return; }
     message('The front door slammed shut behind you.');
     setTimeout(() => message('The star in the basement wants five gifts. Find the riddles.', 'red'), 2500);
   }, 1200);

@@ -22,6 +22,10 @@ export const DIFFICULTY = {
   nightmare: { label: 'Nightmare', speed: 1.3, sight: 1.5, hearing: 1.7, crawler: true, items: 0.5, revive: 0.45 },
 };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+// The server (Node) and every browser must build the exact same map from a seed. Math.hypot is not
+// guaranteed to round identically across JS engines (a 1-ulp difference flips tie-breaks and the maps
+// diverge), but + * and Math.sqrt are exact IEEE operations everywhere. Never use Math.hypot in here.
+const edist = (...v) => { let s = 0; for (const x of v) s += x * x; return Math.sqrt(s); };
 
 export function mulberry32(a) {
   return function () {
@@ -126,6 +130,9 @@ function tryGenerate(seed) {
   const W = GRID, H = GRID;
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
+  // Fisher-Yates with our rng. Never shuffle with arr.sort(() => rng() - 0.5): each JS engine's sort calls the
+  // comparator a different number of times, so Chrome, Firefox, Safari and Node would all build different maps.
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const grid = {}, roomId = {}, path = {};
   const rooms = [];
   const cy0 = Math.floor(H / 2);
@@ -243,13 +250,13 @@ function tryGenerate(seed) {
     for (const r of cand) {
       if (chosen.includes(r)) continue;
       const p = pos3(r);
-      const mind = Math.min(...chosen.map((c) => { const q = pos3(c); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }));
+      const mind = Math.min(...chosen.map((c) => { const q = pos3(c); return edist(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }));
       const s = mind + dAt(r.L, r.cx, r.cy) * 0.1 + (chosen.filter((c) => c.L === r.L).length >= 2 ? -40 : 0);
       if (s > bs) { bs = s; best = r; }
     }
     chosen.push(best);
   }
-  const kinds = ITEM_KINDS.slice().sort(() => rng() - 0.5);
+  const kinds = shuffle(ITEM_KINDS.slice());
   const talismans = chosen.map((r, n) => {
     r.hasTalisman = true;
     const cells = [];
@@ -275,7 +282,7 @@ function tryGenerate(seed) {
     for (let t = 0; t < 3000 && out.length < count; t++) {
       const L = pick(LEVELS); const [i, j] = pick(floorCells[L]); const k = j * W + i;
       if (used[L].has(k) || dAt(L, i, j) < minDist || (filter && !filter(L, i, j))) continue;
-      if (out.some((b) => b.L === L && Math.hypot(b.x / CELL - i, b.z / CELL - j) < spacing)) continue;
+      if (out.some((b) => b.L === L && edist(b.x / CELL - i, b.z / CELL - j) < spacing)) continue;
       used[L].add(k);
       out.push({ id: prefix + out.length, x: (i + 0.5) * CELL + (rng() - 0.5) * 1.0, z: (j + 0.5) * CELL + (rng() - 0.5) * 1.0, L });
     }
@@ -351,7 +358,7 @@ function tryGenerate(seed) {
     }
     for (let n = 0; n < 16 && corr.length; n++) {
       const [i, j] = pick(corr);
-      if (bulbs.some((b) => b.L === L && Math.hypot(b.x / CELL - (i + 0.5), b.z / CELL - (j + 0.5)) < 4)) continue;
+      if (bulbs.some((b) => b.L === L && edist(b.x / CELL - (i + 0.5), b.z / CELL - (j + 0.5)) < 4)) continue;
       bulbs.push({ x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, L, flicker: rng() < 0.45, warm: rng() < 0.5 });
     }
     for (let t = 0, n = 0; t < 600 && n < 14; t++) {
@@ -395,7 +402,7 @@ function tryGenerate(seed) {
     }
     return null;
   };
-  const tmpl = CLUE_TEMPLATES.slice().sort(() => rng() - 0.5);
+  const tmpl = shuffle(CLUE_TEMPLATES.slice());
   const cap = (x) => x[0].toUpperCase() + x.slice(1);
   talismans.forEach((t, n) => {
     const r = rooms[t.room];
@@ -420,11 +427,11 @@ function tryGenerate(seed) {
     let best = null, bd = 1e9;
     for (let j = r.y; j < r.y + r.h; j++) for (let i = r.x; i < r.x + r.w; i++) {
       const dirs = wallDirs(r.L, i, j); if (!dirs.length) continue;
-      const dd = Math.hypot(i - ti, j - tj); if (dd < bd) { bd = dd; best = [i, j, dirs]; }
+      const dd = edist(i - ti, j - tj); if (dd < bd) { bd = dd; best = [i, j, dirs]; }
     }
     if (best) { const [dx, dz] = pick(best[2]); writings.push({ i: best[0], j: best[1], dx, dz, L: r.L, sigil: t.kind, seed: Math.floor(rng() * 1e6) }); }
   }
-  const lore = [...LORE_NOTES.slice(-3), ...LORE_NOTES.slice(0, -3).sort(() => rng() - 0.5).slice(0, 6)];
+  const lore = [...LORE_NOTES.slice(-3), ...shuffle(LORE_NOTES.slice(0, -3)).slice(0, 6)];
   for (const text of lore) { const sp = noteSpot(-1); if (sp) notes.push({ id: 'n' + notes.length, ...sp, text, rot: rng() * 6.28 }); }
 
   const hides = props.filter((p) => HIDE_TYPES.has(p.type)).map((p, n) => ({ id: 'h' + n, type: p.type, L: p.L, x: p.x, z: p.z, rot: p.rot, fx: Math.sin(p.rot), fz: Math.cos(p.rot) }));
@@ -438,6 +445,15 @@ function tryGenerate(seed) {
 }
 
 // ---------- helpers ----------
+// fingerprint of everything you interact with; server and browser compare it to catch a map that came out different
+export function mapSignature(map) {
+  const parts = [map.talismans, map.batteries, map.bells, map.souls, map.hides, map.notes, map.doors]
+    .map((list) => list.map((o) => `${o.id ?? ''}:${Math.round((o.x ?? o.i) * 100)}:${Math.round((o.z ?? o.j) * 100)}:${o.L ?? 0}`).join('|'));
+  let h = 0; const s = parts.join('#');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
 export function cellType(map, L, i, j) {
   if (i < 0 || j < 0 || i >= map.W || j >= map.H || !map.grid[L]) return 0;
   return map.grid[L][j * map.W + i];
@@ -544,7 +560,7 @@ export function bfsPath3(map, L0, si, sj, L1, ti, tj) {
 
 export function lineOfSight(map, L, x0, z0, x1, z1) {
   const dx = x1 - x0, dz = z1 - z0;
-  const d = Math.hypot(dx, dz);
+  const d = edist(dx, dz);
   const steps = Math.ceil(d / 0.3);
   for (let s = 1; s < steps; s++) {
     const t = s / steps;

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, DIFFICULTY, generateMap, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
+  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -87,7 +87,7 @@ function freeColor() {
 
 function startMsg() {
   return {
-    t: 'start', seed: game.seed, difficulty: game.difficulty,
+    t: 'start', seed: game.seed, sig: mapSignature(game.map), difficulty: game.difficulty,
     players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char, x: p.x, z: p.z, L: p.L, alive: p.alive, escaped: p.escaped, items: p.items })),
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
     moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
