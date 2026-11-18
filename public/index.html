@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HOLLOWMERE</title>
+<title>CHUDAIL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&display=swap" rel="stylesheet" />
@@ -21,7 +21,7 @@
 
   /* ---------- menu ---------- */
   #menu { background: radial-gradient(ellipse at 50% 60%, #1a0d0b 0%, #070405 55%, #000 100%); }
-  .title { font-family: 'IM Fell English SC', serif; font-size: clamp(42px, 9vw, 112px); letter-spacing: .22em; margin: 0 0 6px .32em; color: #cfc4a8; text-shadow: 0 0 18px rgba(150,0,0,.6), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); animation: flick 6s infinite; }
+  .title { font-family: 'IM Fell English SC', serif; font-size: clamp(46px, 10vw, 124px); letter-spacing: .28em; margin: 0 0 6px .32em; color: #cfc4a8; text-shadow: 0 0 18px rgba(150,0,0,.6), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); animation: flick 6s infinite; }
   .sub { color: var(--dim); letter-spacing: .4em; font-size: 13px; margin-bottom: 38px; text-transform: uppercase; }
   @keyframes flick { 0%,19%,21%,62%,64%,100% { opacity: 1 } 20%, 63% { opacity: .25 } 20.5% { opacity: .8 } }
   .panel { width: min(620px, 94vw); max-height: 92vh; overflow-y: auto; background: rgba(8,6,6,.72); border: 1px solid #2a1c18; padding: 26px 28px; box-shadow: 0 0 60px rgba(0,0,0,.9), inset 0 0 40px rgba(60,0,0,.15); }
@@ -145,10 +145,10 @@
 <canvas id="grain" width="256" height="256"></canvas>
 
 <div id="menu" class="screen show">
-  <div class="title">HOLLOWMERE</div>
+  <div class="title">CHUDAIL</div>
   <div class="sub">a co-op horror for 1 to 6 souls</div>
   <div class="panel">
-    <p>Hollowmere Sanatorium closed in 1974, the night the staff vanished. Something tall still walks the wards. It doesn't stop and it never sleeps.</p>
+    <p>Ashgrove Sanatorium closed in 1974, the night the staff vanished. The patients whispered about a <i>chudail</i>: a woman with long black hair whose feet point backwards. She still walks the wards. She doesn't stop and she never sleeps.</p>
     <p>Read the <span style="color:#e6dcc2">notes</span> the staff left behind: they say where the bones are hidden. Find the <span style="color:#ff8a3a">five bone effigies</span> to break the seal on the foyer door, then get out. <span style="color:#c44">It hears you running. It sees your light.</span> Shine your torch in its face and it slows down, but then it knows exactly where you are.</p>
     <label for="name">Your name</label>
     <input id="name" type="text" maxlength="14" placeholder="Survivor" autocomplete="off" />
@@ -157,7 +157,7 @@
     <div class="controls">
       <b>WASD</b><span>move</span><b>MOUSE</b><span>look</span>
       <b>SHIFT</b><span>sprint (it will hear you)</span><b>CTRL</b><span>sneak: slow, silent walk</span>
-      <b>C</b><span>crouch (silent, harder to see)</span><b>F</b><span>flashlight</span>
+      <b>C</b><span>crouch: silent, almost invisible in the dark</span><b>F</b><span>flashlight</span>
       <b>E</b><span>take / read / hide in a locker</span>
       <b>Q</b><span>ring a spirit bell: freezes her</span>
     </div>
@@ -166,7 +166,7 @@
 </div>
 
 <div id="lobby" class="screen">
-  <div class="title" style="font-size:48px">HOLLOWMERE</div>
+  <div class="title" style="font-size:48px">CHUDAIL</div>
   <div class="panel">
     <label>Survivors <span id="pcount"></span></label>
     <ul class="plist" id="plist"></ul>

@@ -1,4 +1,4 @@
-// The monster ("The Hollow"), other players, and apparitions.
+// The chudail (monster), the crawler, other players, and apparitions.
 import * as THREE from 'three';
 import * as TX from './textures.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -330,7 +330,8 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
       const p = ph + (s > 0 ? Math.PI : 0);
       pose(B['thigh' + sfx], moving ? Math.sin(p) * 0.6 * amp : 0.04);
       pose(B['shin' + sfx], moving ? -Math.max(0, -Math.cos(p)) * 1.0 * amp : -0.08);
-      pose(B['foot' + sfx], moving ? Math.max(0, Math.cos(p)) * 0.3 * amp : 0);
+      // a chudail's feet point backwards
+      pose(B['foot' + sfx], moving ? -Math.max(0, Math.cos(p)) * 0.3 * amp : 0, Math.PI);
       const pa = ph + (s > 0 ? 0 : Math.PI);
       if (stun) {
         pose(B['upperarm' + sfx], 2.5 + Math.sin(t * 30 + s) * 0.1, 0, s * 0.35);

@@ -1,4 +1,4 @@
-// HOLLOWMERE — client
+// CHUDAIL — client
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -534,7 +534,7 @@ function onEvent(m) {
     case 'escaped': {
       if (m.id === S.myId) {
         S.me.escaped = true; S.black = 0; S.whiteOut = 1;
-        message('You escaped Hollowmere.');
+        message('You escaped Ashgrove. She will not follow you.');
         audio.setChase(false);
         setTimeout(() => startSpectate(), 2500);
       } else {

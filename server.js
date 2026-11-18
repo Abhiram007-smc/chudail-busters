@@ -1,4 +1,4 @@
-// HOLLOWMERE — multiplayer horror server
+// CHUDAIL — multiplayer horror server
 // Serves the game and runs the authoritative game state + monster AI.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -572,7 +572,7 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log('\n  H O L L O W M E R E');
+  console.log('\n  C H U D A I L');
   console.log('  ───────────────────');
   console.log(`  You:            http://localhost:${PORT}`);
   for (const a of lanAddresses()) console.log(`  Friends (Wi-Fi): http://${a}:${PORT}`);

@@ -1,8 +1,8 @@
-# HOLLOWMERE
+# CHUDAIL
 
 A co-op first-person horror game for 1–6 players, played in the browser.
 
-Hollowmere Sanatorium closed in 1974. Something tall still walks the wards.
+Ashgrove Sanatorium closed in 1974. The patients whispered about a *chudail*: a woman with long black hair whose feet point backwards. She still walks the wards.
 Find the **five bone effigies** to break the seal on the foyer door, then get out alive.
 
 ## Start the game
@@ -10,7 +10,7 @@ Find the **five bone effigies** to break the seal on the foyer door, then get ou
 You need [Node.js](https://nodejs.org) 18 or newer.
 
 ```bash
-cd hollowmere
+cd chudail
 npm install
 npm start
 ```
@@ -55,7 +55,7 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 
 ## The things that hunt you
 
-- **The Hollow:** tall, pale, long black hair. She carries a cold glow, so you can see her coming.
+- **The Chudail:** tall, pale, long black hair, feet turned backwards. She carries a cold glow, so you can see her coming.
   - She hunts by sound and light. Sneaking is silent.
   - Shine your torch in her face and she slows down, but then she knows exactly where you are.
 - **The Crawler:** wakes after the first effigy. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
@@ -83,7 +83,7 @@ public/audio.js         generated horror audio (ambience, footsteps, stingers)
 public/models/          3D characters (.glb)
 public/img/chars/       character portraits for the lobby
 public/sounds/          the jumpscare scream
-blender/build_characters.py   Blender script that builds the monster ("The Hollow")
+blender/build_characters.py   Blender script that builds the monster (the chudail)
 ```
 
 To rebuild the Blender models:
@@ -98,7 +98,7 @@ To rebuild the Blender models:
   - "Adventurer", "Hoodie Character", "Woman", "Man", "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0
-- The Hollow and the Crawler: modeled with a script in Blender for this game
+- The Chudail and the Crawler: modeled with a script in Blender for this game
 - Fonts: IM Fell English SC, Courier Prime, Homemade Apple, Rubik Wet Paint, Nosifer (Google Fonts, OFL)
 - Online play: Cloudflare quick tunnels (`cloudflared`)
 - Engine: [three.js](https://threejs.org) (MIT), [ws](https://github.com/websockets/ws) (MIT)
