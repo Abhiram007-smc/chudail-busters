@@ -49,12 +49,20 @@ Pick one in the lobby before anyone presses **Begin**:
 ## How to win
 
 1. **Find the 5 ritual items:** a Human Skull, a Black Candle, a Cracked Mirror, a Cursed Doll and a Braid of Her Hair.
-   They are spread over all three floors. Read the notes the staff left behind: each one says which room, wing and floor an item is in.
+   They are spread over all three floors and they are not easy to spot. The staff left notes with **riddles**: a note never names the room,
+   it describes it ("where the cradles rock with no one in them") and hints at the floor. Each item also has **her sign**, drawn on its note:
+   find the same sign scratched in blood on the walls by the room's door and inside it. Items also **whisper** when you get close.
    Every item you take makes her faster. If you die, the items you carried drop where you fell.
 2. **Fill the star.** Take the stairs down to the basement shrine and place one item on each point of the pentagram (E).
 3. **Lure her into the centre.** When the fifth item goes down, the star starts to burn. While it burns she cannot touch anyone standing inside it.
    Make noise, let her see you, and wait inside the star: when she comes for you, it drags her into the middle and binds her.
 4. **Run.** The front door in the ground-floor foyer opens. Get out.
+
+## Scares
+
+Ghost apparitions, her face cutting in for a single frame, the lights dying while she gets closer with every flicker of your torch,
+breathing right behind you, and a white-and-red strobe when she catches you. If flashing images are a problem for you, tick
+**Reduce flashing** in the lobby: the strobes become soft single fades.
 
 ## Controls
 

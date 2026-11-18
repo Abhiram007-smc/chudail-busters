@@ -132,12 +132,17 @@ function faceCanvas() {
 
 function gownCanvas() {
   const W = 256, H = 512, c = TX.canvas(W, H), g = c.getContext('2d');
-  g.fillStyle = '#6c7166'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#4a4a42'; g.fillRect(0, 0, W, H);
   for (let x = 0; x < W; x += 6) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,240'},${rr(0.02, 0.12)})`; g.fillRect(x, 0, rr(2, 6), H); }
   for (let k = 0; k < 30; k++) {
     const x = Math.random() * W, y = Math.random() * H, r = rr(10, 60);
     const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${Math.random() < 0.35 ? '90,5,5' : '50,40,20'},${rr(0.25, 0.6)})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  }
+  for (let k = 0; k < 14; k++) { // old blood soaked in and run down
+    const x = Math.random() * W, y0 = rr(0, H * 0.5), len = rr(80, 300);
+    const gr = g.createLinearGradient(0, y0, 0, y0 + len); gr.addColorStop(0, 'rgba(70,4,4,0.85)'); gr.addColorStop(1, 'rgba(40,2,2,0)');
+    g.fillStyle = gr; g.fillRect(x, y0, rr(2, 7), len);
   }
   g.globalCompositeOperation = 'destination-out';
   g.beginPath(); g.moveTo(0, H);
@@ -161,6 +166,64 @@ function hairCanvas() {
   return c;
 }
 
+// cold fresnel rim so her silhouette reads in the dark
+function addRim(mat, color, power = 2.4) {
+  const rim = new THREE.Color(color);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = { value: rim };
+    sh.fragmentShader = 'uniform vec3 rimColor;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      { float rimF = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0); totalEmissiveRadiance += rimColor * pow(rimF, ${power.toFixed(2)}); }`);
+  };
+  mat.customProgramCacheKey = () => 'rim' + power;
+  return mat;
+}
+
+// long, wet, stringy hair: separate strands that hang to her waist and over her face
+function addHairStrands(head, mat) {
+  const strands = [];
+  const strand = (len, w) => {
+    const geo = new THREE.PlaneGeometry(w, len, 1, 10); geo.translate(0, -len / 2, 0);
+    const pos = geo.attributes.position, wig = rr(-0.03, 0.03);
+    for (let k = 0; k < pos.count; k++) { const y = pos.getY(k), f = -y / len; pos.setX(k, pos.getX(k) * (1 - f * 0.55) * (0.3 + 0.7 * Math.min(1, f * 5)) + Math.sin(f * 6 + wig * 80) * 0.012); pos.setZ(k, f * f * 0.06 - (1 - Math.min(1, f * 5)) * 0.03); }
+    geo.computeVertexNormals();
+    return new THREE.Mesh(geo, mat);
+  };
+  // strands hang from a pivot at the centre of the skull, so they can be swung back to hang straight down
+  // (gravity) while their roots slide over the scalp instead of leaving it
+  const pivot = new THREE.Group(); pivot.position.set(0, 0.3, 0); head.add(pivot);
+  const place = (m, x, y, z, ry, rx) => { const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.position.set(x, y - 0.3, z); g.rotation.set(rx, ry, 0); g.add(m); pivot.add(g); strands.push({ g, rx, ph: Math.random() * 6.28 }); };
+  for (let k = 0; k < 44; k++) { // crown, sides and back (angle 0 = back of the head, the face looks down -z)
+    const a = rr(-2.35, 2.35), r = rr(0.12, 0.16), y = rr(0.24, 0.4);
+    place(strand(rr(0.85, 1.45), rr(0.05, 0.1)), Math.sin(a) * r, y, Math.cos(a) * r, a, -rr(0.04, 0.22));
+  }
+  for (const x of [-0.12, -0.075, -0.035, 0.03, 0.085, 0.125]) { // curtain over the face, parted so one eye shows
+    place(strand(rr(0.7, 1.15), rr(0.045, 0.075)), x + rr(-0.01, 0.01), rr(0.3, 0.36), -0.19, Math.PI + rr(-0.15, 0.15), rr(0.1, 0.2));
+  }
+  strands.forEach((h) => (h.g.children[0].castShadow = true));
+  strands.pivot = pivot;
+  return strands;
+}
+
+function addSmoke(root, tex) {
+  const puffs = [];
+  for (let k = 0; k < 10; k++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x000000, transparent: true, opacity: 0, depthWrite: false }));
+    root.add(sp);
+    puffs.push({ sp, a: Math.random() * 6.28, r: rr(0.25, 0.55), y: Math.random() * 1.3, v: rr(0.15, 0.35), s: rr(0.8, 1.5) });
+  }
+  return (dt) => {
+    for (const p of puffs) {
+      p.y += p.v * dt; p.a += dt * 0.4;
+      if (p.y > 1.4) { p.y = 0; p.a = Math.random() * 6.28; }
+      const life = p.y / 1.4;
+      p.sp.position.set(Math.cos(p.a) * p.r, p.y, Math.sin(p.a) * p.r);
+      p.sp.scale.setScalar(p.s * (0.6 + life));
+      p.sp.material.opacity = Math.sin(life * Math.PI) * 0.55;
+    }
+  };
+}
+
+const _hq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
 let shared = null;
 function getShared() {
   if (shared) return shared;
@@ -168,7 +231,7 @@ function getShared() {
   shared = {
     skin: new THREE.MeshStandardMaterial({ map: TX.toTex(sk), bumpMap: TX.toTex(sk, { srgb: false }), bumpScale: 3, roughness: 0.42, color: 0xbab2a2 }),
     face: new THREE.MeshStandardMaterial({ map: TX.toTex(faceCanvas(), { repeat: false }), roughness: 0.45, color: 0xc8c0b0 }),
-    gown: new THREE.MeshStandardMaterial({ map: TX.toTex(gownCanvas(), { repeat: false }), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95 }),
+    gown: new THREE.MeshStandardMaterial({ map: TX.toTex(gownCanvas(), { repeat: false }), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95, color: 0x8a857a }),
     hair: new THREE.MeshStandardMaterial({ map: TX.toTex(hairCanvas(), { repeat: false }), alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.55, color: 0x777777 }),
     hairCap: new THREE.MeshStandardMaterial({ color: 0x0b0806, roughness: 0.6 }),
     claw: new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.3 }),
@@ -243,7 +306,7 @@ export function createMonster({ ghost = false } = {}) {
   const cap = new THREE.Mesh(new THREE.SphereGeometry(0.205, 20, 10, 0, Math.PI * 2, 0, 1.25), S.hairCap);
   cap.scale.copy(headMesh.scale); cap.position.copy(headMesh.position); cap.rotation.x = 0.15; head.add(cap);
   const hair = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.27, 0.95, 24, 4, true, Math.PI + 0.62, Math.PI * 2 - 1.24), S.hair);
-  hair.position.set(0, 0.16 + 0.3 - 0.475 + 0.02, 0.01); hair.castShadow = true; head.add(hair);
+  hair.position.set(0, 0.16 + 0.3 - 0.475 + 0.02, 0.01); hair.castShadow = true; hair.name = 'hairSheet'; head.add(hair);
   const eyes = [];
   for (const sx of [-1, 1]) {
     const e = new THREE.Mesh(new THREE.SphereGeometry(sx > 0 ? 0.011 : 0.008, 8, 6), S.eye);
@@ -304,7 +367,7 @@ export function createMonster({ ghost = false } = {}) {
 
 function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
   const { inst, bones: B } = rigFrom(MODELS.hollow);
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, color: ghost ? 0x4a4744 : 0xe6ded2, emissive: ghost ? 0x0a0a10 : 0x2c303c });
+  const mat = addRim(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, color: ghost ? 0x4a4744 : 0x878177, emissive: ghost ? 0x06060a : 0x0c0f15 }), ghost ? 0x3a4668 : 0x6f88c4, 2.2);
   inst.traverse((o) => { if (o.isMesh) o.material = mat; });
   hips.visible = false;
   root.add(inst);
@@ -316,9 +379,20 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
   const rag = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.3, 0.78, 18, 5, true), S.gown);
   rag.castShadow = true; rag.scale.set(1.1, 1, 0.85);
   mountAt(B.hips, rag, new THREE.Vector3(0, 1.08, -0.01));
-  // a cold glow it carries with it, so you can SEE it coming down the hall
-  const glow = ghost ? null : new THREE.PointLight(0x9fb4ff, 4, 10, 1.3);
-  if (glow) { glow.position.set(0, 1.9, -0.6); root.add(glow); }
+  // a cold glow it carries with it, so you can SEE it coming down the hall (low and in front: lit from below)
+  const glow = ghost ? null : new THREE.PointLight(0x8fa6dc, 4, 10, 1.3);
+  if (glow) { glow.position.set(0, 1.15, -0.75); root.add(glow); }
+  const hairMat = new THREE.MeshStandardMaterial({ map: S.hair.map, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.5, metalness: 0, color: 0x262422 });
+  const strands = addHairStrands(head, hairMat);
+  { // tuck the old hair sheet's flat top edge under the scalp; the strands give it volume
+    const sheet = head.getObjectByName('hairSheet');
+    sheet.geometry = new THREE.CylinderGeometry(0.15, 0.29, 1.15, 24, 4, true, Math.PI + 0.62, Math.PI * 2 - 1.24);
+    sheet.position.y -= 0.14; sheet.material = hairMat;
+    const cap = head.children.find((o) => o.isMesh && o.material === S.hairCap); if (cap) cap.scale.multiplyScalar(1.06);
+  }
+  const smoke = addSmoke(root, S.glow);
+  const eyes = root.userData.eyes || [];
+  const glitch = { t: rr(2, 6), on: 0 };
   Object.assign(root.userData, { bones: B, headObj: head, rag, inst, glow });
   const LR = [['_L', 1], ['_R', -1]];
   root.userData.update = (dt, speed, state, t) => {
@@ -368,6 +442,30 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
     if (stun) { anim.tilt = Math.sin(t * 45) * 0.5; anim.turn = Math.sin(t * 37) * 0.4; }
     head.rotation.set(chase ? 0.35 : stun ? -0.3 : 0, anim.turn, anim.tilt);
     head.position.x = Math.sin(t * 31) * (chase ? 0.012 : 0.003);
+    // hair hangs down whatever her head does (mostly), sways, and whips around when she runs
+    head.getWorldQuaternion(_hq); root.getWorldQuaternion(_rq);
+    strands.pivot.quaternion.identity().slerp(_hq.invert().multiply(_rq), 0.8);
+    for (const h of strands) {
+      h.g.rotation.z = Math.sin(t * 1.1 + h.ph) * 0.05 + (chase ? Math.sin(t * 8 + h.ph) * 0.1 : 0);
+      h.g.rotation.x = h.rx + (moving ? Math.abs(Math.sin(ph + h.ph)) * 0.12 * amp : 0) + (chase ? 0.15 : 0);
+    }
+    // eyes: dim embers, flaring white-red when she hunts you
+    for (let k = 1; k < eyes.length; k += 2) {
+      const gl = eyes[k];
+      const flare = chase ? 1 : stun ? 0.2 : 0.45 + Math.sin(t * 2.3 + k) * 0.15;
+      gl.scale.setScalar(0.05 + flare * 0.07 + Math.random() * 0.01);
+      gl.material.opacity = 0.45 + flare * 0.5;
+      gl.material.color.setHex(chase ? 0xff3a20 : 0xff6040);
+    }
+    smoke(dt);
+    // now and then she skips, like a bad frame of film
+    glitch.t -= dt;
+    if (glitch.on > 0) { glitch.on -= dt; if (glitch.on <= 0) { inst.position.x = 0; inst.position.z = 0; } }
+    else if (glitch.t <= 0) {
+      glitch.t = chase ? rr(0.8, 2.5) : rr(3, 8); glitch.on = rr(0.04, 0.09);
+      inst.position.x = rr(-0.22, 0.22); inst.position.z = rr(-0.15, 0.15);
+      anim.turn = rr(-0.8, 0.8); anim.tilt = rr(-0.7, 0.7);
+    }
   };
 }
 

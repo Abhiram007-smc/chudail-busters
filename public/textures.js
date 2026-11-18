@@ -288,6 +288,50 @@ export function writingCanvas(text) {
   return c;
 }
 
+// her sign for each ritual item: scratched into walls ('wall') or inked on a note ('ink')
+export function sigilCanvas(kind, style = 'wall') {
+  const S = 256, c = canvas(S), g = c.getContext('2d');
+  const ink = style === 'ink';
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const passes = ink ? 2 : 3;
+  const shape = (j) => {
+    const J = (v) => v + rr(-j, j);
+    g.beginPath();
+    switch (kind) {
+      case 'skull': // ringed eye with three dots under it
+        g.ellipse(J(128), J(100), 62, 52, 0, 0, 7); g.moveTo(J(70), J(178)); g.lineTo(J(186), J(178));
+        for (const x of [96, 128, 160]) { g.moveTo(J(x), J(200)); g.lineTo(J(x), J(222)); }
+        g.moveTo(J(110), J(100)); g.arc(J(128), J(100), 18, 0, 7); break;
+      case 'candle': // spear with a teardrop flame and two crossbars
+        g.moveTo(J(128), J(230)); g.lineTo(J(128), J(96)); g.moveTo(J(84), J(150)); g.lineTo(J(172), J(150)); g.moveTo(J(100), J(196)); g.lineTo(J(156), J(196));
+        g.moveTo(J(128), J(96)); g.quadraticCurveTo(J(90), J(70), J(128), J(22)); g.quadraticCurveTo(J(166), J(70), J(128), J(96)); break;
+      case 'mirror': // diamond split by a jagged crack
+        g.moveTo(J(128), J(24)); g.lineTo(J(216), J(128)); g.lineTo(J(128), J(232)); g.lineTo(J(40), J(128)); g.closePath();
+        g.moveTo(J(100), J(40)); g.lineTo(J(140), J(100)); g.lineTo(J(108), J(140)); g.lineTo(J(150), J(190)); g.lineTo(J(126), J(232)); break;
+      case 'doll': // a stick child with crossed-out eyes
+        g.arc(J(128), J(70), 38, 0, 7); g.moveTo(J(128), J(108)); g.lineTo(J(128), J(178)); g.moveTo(J(72), J(132)); g.lineTo(J(184), J(132));
+        g.moveTo(J(128), J(178)); g.lineTo(J(92), J(232)); g.moveTo(J(128), J(178)); g.lineTo(J(164), J(232));
+        for (const x of [112, 144]) { g.moveTo(J(x - 9), J(60)); g.lineTo(J(x + 9), J(76)); g.moveTo(J(x + 9), J(60)); g.lineTo(J(x - 9), J(76)); } break;
+      default: { // hair: a spiral that trails away
+        let a = 0, r = 4; g.moveTo(128, 110);
+        for (let k = 0; k < 90; k++) { a += 0.24; r += 1.05; g.lineTo(J(128 + Math.cos(a) * r), J(110 + Math.sin(a) * r * 0.9)); }
+        g.lineTo(J(232), J(236));
+      }
+    }
+    g.stroke();
+  };
+  for (let k = 0; k < passes; k++) {
+    if (ink) { g.strokeStyle = `rgba(40,20,30,${0.75 - k * 0.2})`; g.lineWidth = 7 - k * 2; }
+    else { g.strokeStyle = k === 0 ? 'rgba(70,6,4,0.55)' : `rgba(${rr(80, 120)},${rr(4, 12)},${rr(4, 10)},0.8)`; g.lineWidth = k === 0 ? 13 : rr(3, 6); }
+    shape(ink ? 2 : 4);
+  }
+  if (!ink) { // runs and scratches
+    g.strokeStyle = 'rgba(90,6,4,0.7)';
+    for (let k = 0; k < 6; k++) { const x = rr(60, 196), y = rr(120, 220); g.lineWidth = rr(1.5, 3.5); g.beginPath(); g.moveTo(x, y); g.lineTo(x + rr(-2, 2), y + rr(15, 50)); g.stroke(); }
+  }
+  return c;
+}
+
 export function glowCanvas() {
   const S = 128, c = canvas(S), g = c.getContext('2d');
   const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);

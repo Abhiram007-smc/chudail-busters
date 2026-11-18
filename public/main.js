@@ -69,6 +69,34 @@ const HorrorShader = {
 };
 
 // ---------------- state ----------------
+// ---------------- screen fx: flashes, strobes, glitches ----------------
+// FX.calm (lobby checkbox) turns strobes into soft single fades for photosensitive players
+const FX = { calm: false };
+function fxFlash(color = '#fff', peak = 0.9, ms = 140) {
+  const el = $('fxflash');
+  if (FX.calm) { peak = Math.min(peak, 0.22); ms = Math.max(ms, 320); }
+  el.style.transition = 'none'; el.style.background = color; el.style.opacity = peak;
+  void el.offsetWidth;
+  el.style.transition = `opacity ${ms}ms ease-out`; el.style.opacity = 0;
+}
+function fxGlitch(ms = 120) {
+  if (FX.calm) return;
+  const looks = ['invert(1) contrast(1.4)', 'contrast(3) saturate(0) brightness(1.5)', 'hue-rotate(160deg) saturate(4)', 'contrast(2.2) sepia(1) hue-rotate(-45deg) saturate(6)'];
+  canvas.style.filter = looks[(Math.random() * looks.length) | 0];
+  canvas.style.transform = `translateX(${rnd(-28, 28)}px) skewX(${rnd(-6, 6)}deg) scale(1.04)`;
+  setTimeout(() => { canvas.style.filter = ''; canvas.style.transform = ''; }, ms);
+}
+function fxFace(ms = 70, opacity = 0.85) { // one subliminal frame of her face
+  const ff = $('faceflash');
+  if (!ff.firstChild) ff.appendChild(scareCanvas());
+  if (FX.calm) opacity *= 0.3;
+  const c = ff.firstChild;
+  c.style.transform = `translate(-50%,-50%) scale(${rnd(1, 1.4)}) rotate(${rnd(-7, 7)}deg)`;
+  c.style.filter = Math.random() < 0.35 ? 'invert(1) contrast(1.5)' : `contrast(${rnd(1.3, 2.2)}) saturate(${rnd(0.5, 2)})`;
+  ff.style.display = 'block'; ff.style.opacity = opacity;
+  clearTimeout(fxFace.t); fxFace.t = setTimeout(() => (ff.style.display = 'none'), ms);
+}
+
 const S = {
   phase: 'menu', myId: 0, myColor: '#fff', name: '', myChar: (() => { try { return localStorage.getItem('hm_char') || ''; } catch { return ''; } })(),
   lobby: [], players: new Map(), map: null, world: null, scene: null, composer: null, post: null,
@@ -187,8 +215,10 @@ $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn
 $('startBtn').onclick = () => { audio.init(); send({ t: 'start' }); };
 $('sens').oninput = (e) => { S.sens = +e.target.value; try { localStorage.setItem('hm_sens', S.sens); } catch {} };
 $('vol').oninput = (e) => { audio.setVolume(+e.target.value); try { localStorage.setItem('hm_vol', e.target.value); } catch {} };
+$('calm').onchange = (e) => { FX.calm = e.target.checked; try { localStorage.setItem('cb_calm', FX.calm ? '1' : '0'); } catch {} };
 try {
   if (localStorage.getItem('hm_sens')) { S.sens = +localStorage.getItem('hm_sens'); $('sens').value = S.sens; }
+  if (localStorage.getItem('cb_calm') === '1') { FX.calm = true; $('calm').checked = true; }
   if (localStorage.getItem('hm_vol')) { audio.volume = +localStorage.getItem('hm_vol'); $('vol').value = audio.volume; }
 } catch {}
 
@@ -268,11 +298,56 @@ addEventListener('resize', () => {
 let flashlight, flashTarget, playerGlow, lightPool = [], dust = null;
 const flDir = new THREE.Vector3(0, 0, -1);
 
+// ---------------- loading: the house lets you in ----------------
+const LOAD_LINES = [
+  'she has been waiting for you', 'count the doors. she already has', 'do not run. she hears running',
+  'her feet point backwards', 'the star in the basement is hungry', 'someone is breathing behind the wallpaper',
+  'they never found the night nurses', 'if she says your name, do not answer', 'she is already in the house',
+  'keep your light low', 'five gifts. five points. one way out', 'the last group did not come back up',
+];
+let loadFx = null;
+function startLoadingFx() {
+  stopLoadingFx();
+  const el = $('loading'), line = $('lline'), prog = $('lprog');
+  try { audio.init(); } catch {}
+  const face = scareCanvas(); face.className = 'lface'; el.prepend(face);
+  const lines = LOAD_LINES.slice().sort(() => Math.random() - 0.5);
+  const st = { t0: performance.now(), p: 0, done: false, ids: [], face, k: 0 };
+  const every = (ms, fn) => st.ids.push(setInterval(fn, ms));
+  const type = () => {
+    const txt = lines[st.k++ % lines.length]; let n = 0; line.textContent = '';
+    clearInterval(st.typer); st.typer = setInterval(() => { line.textContent = txt.slice(0, ++n); if (n >= txt.length) clearInterval(st.typer); }, 42);
+  };
+  type(); every(2300, type);
+  every(120, () => { st.p += (st.done ? 100 - st.p : (88 - st.p) * 0.035); prog.style.width = st.p.toFixed(1) + '%'; });
+  every(900, () => { try { audio.heartbeat(0.35 + Math.min(0.4, (performance.now() - st.t0) / 12000)); } catch {} });
+  // she drifts up out of the dark now and then
+  every(2600, () => {
+    if (Math.random() < 0.55) { face.style.opacity = rnd(0.05, 0.12).toFixed(2); setTimeout(() => (face.style.opacity = 0), 900); }
+  });
+  setTimeout(() => { try { audio.whisper(rnd(-0.8, 0.8), 0.35, 2.2); audio.rumble(0.45, 4); } catch {} }, 700);
+  // one subliminal frame, once
+  setTimeout(() => {
+    if (!loadFx || FX.calm) return;
+    face.style.transition = 'none'; face.style.opacity = 0.75; face.style.filter = 'invert(1) contrast(2)';
+    try { audio.stinger(0.35); } catch {}
+    setTimeout(() => { face.style.opacity = 0; face.style.filter = ''; face.style.transition = ''; }, 60);
+  }, rnd(1900, 3100));
+  loadFx = st;
+}
+function stopLoadingFx() {
+  if (!loadFx) return;
+  loadFx.ids.forEach(clearInterval); clearInterval(loadFx.typer); loadFx.face.remove(); loadFx = null;
+}
+
 function startGame(m) {
   leaveGame();
   showScreen('loading');
   S.phase = 'loading';
-  const go = () => buildGame(m);
+  startLoadingFx();
+  const t0 = performance.now();
+  // let the dread build for a few seconds even on a fast machine
+  const go = () => { if (loadFx) loadFx.done = true; setTimeout(() => buildGame(m), Math.max(250, 4200 - (performance.now() - t0))); };
   const fonts = Promise.all(['64px "IM Fell English SC"', 'bold 54px "Courier Prime"', '92px "Rubik Wet Paint"', '20px "Homemade Apple"'].map((f) => document.fonts.load(f).catch(() => {})));
   const chars = Promise.all(m.players.map((p) => ensureChar(p.char)));
   Promise.race([Promise.all([loadModels(), fonts, chars]), new Promise((r) => setTimeout(r, 9000))]).then(() => setTimeout(go, 30));
@@ -366,7 +441,7 @@ function buildGame(m) {
 
   S.fear = 0; S.red = 0; S.black = 1; S.shake = 0; S.timers = []; S.spectating = null; S.jumpscare = false; S.ghostState = null;
   S.nextScare = performance.now() / 1000 + rnd(30, 45);
-  S.flickUntil = 0; S.lightsOutUntil = 0;
+  S.flickUntil = 0; S.lightsOutUntil = 0; S.torchCtl = null;
   S.clues = new Set(); S.reading = null; renderClues();
   S.phase = 'playing';
   $('hud').classList.add('show'); $('spectate').style.display = 'none';
@@ -375,12 +450,15 @@ function buildGame(m) {
   setObjective();
   warmUp(scene);
   audio.init(); audio.startAmbience(); audio.startMonsterVoice();
+  stopLoadingFx();
+  // the door shuts behind you
+  fxFace(70, 0.7); fxFlash('#7a0000', 0.8, 700); audio.stinger(0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1);
   showScreen('resume');
   $('resume').querySelector('h2').textContent = 'CLICK TO ENTER';
   if (!S.spectator) showBriefing(); else $('brief').style.display = 'none';
   if (!S.spectator) setTimeout(() => {
-    message('The foyer door is sealed by five runes.');
-    setTimeout(() => message('Find the bone effigies. Something is waking up.', 'red'), 2500);
+    message('The front door slammed shut behind you.');
+    setTimeout(() => message('The star in the basement wants five gifts. Find the riddles.', 'red'), 2500);
   }, 1200);
 }
 
@@ -712,7 +790,7 @@ function showBriefing() {
   $('brief').innerHTML = `
     <div class="bh">YOUR OBJECTIVES</div>
     <ol>
-      <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff's notes say where.</li>
+      <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff left riddles in their notes, and each item has her sign: find the same sign scratched on the walls. Listen too: they whisper when you are close.</li>
       <li><b>Carry them down to the shrine in the basement</b> and place one on each point of the star. If you die carrying one, you drop it.</li>
       <li><b>Lure the Chudail into the centre of the star.</b> When it burns she cannot touch anyone standing inside it. Make her come to you; when she steps into the middle she is bound.</li>
       <li><b>Escape through the front door</b> on the ground floor.</li>
@@ -734,17 +812,21 @@ function openNote(id) {
   if (!n) return;
   S.reading = id; n.read = true;
   $('noteText').textContent = n.text;
+  const sg = $('noteSigil');
+  if (n.sigil) { sg.src = sigilURL(n.sigil); sg.style.display = 'block'; } else sg.style.display = 'none';
   $('note').classList.add('show');
   audio.paper?.();
   if (n.clue) send({ t: 'note', id });
 }
+const sigilCache = {};
+function sigilURL(kind) { return sigilCache[kind] || (sigilCache[kind] = TX.sigilCanvas(kind, 'ink').toDataURL()); }
 function closeNote() { S.reading = null; $('note').classList.remove('show'); audio.paper?.(); }
 function renderClues() {
   const el = $('clues');
   if (!S.world || !S.clues.size) { el.innerHTML = ''; return; }
   const rows = [...S.clues].map((id) => {
     const n = S.world.notes.get(id); const t = S.world.talismans.get(n.clue);
-    return `<div class="${t && (t.taken || S.placed.includes(n.clue)) ? 'done' : ''}">• ${esc(n.about)}</div>`;
+    return `<div class="${t && (t.taken || S.placed.includes(n.clue)) ? 'done' : ''}">• ${esc(n.about)}${n.sigil ? `<img class="sg" src="${sigilURL(n.sigil)}" alt="">` : ''}</div>`;
   });
   el.innerHTML = '<div class="h">CLUES</div>' + rows.join('');
 }
@@ -793,11 +875,12 @@ function showGhost(x, z, until, kind) {
 function hideGhost() { S.ghost.visible = false; S.ghostState = null; }
 
 function runScare(t, forced) {
-  const options = ['apparition', 'apparition', 'footsteps', 'whisper', 'blackout', 'blackout', 'bulb', 'slam'];
-  if (S.progress >= 2) options.push('faceflash', 'blackout');
+  const options = ['apparition', 'apparition', 'footsteps', 'whisper', 'blackout', 'blackout', 'bulb', 'slam', 'behind', 'subliminal'];
+  if (S.progress >= 1) options.push('approach', 'behind');
+  if (S.progress >= 2) options.push('faceflash', 'approach', 'blackout');
   let type = forced || options[Math.floor(Math.random() * options.length)];
   const monD = Math.hypot(S.mon.x - S.me.x, S.mon.z - S.me.z);
-  if (type === 'apparition' && monD < 18) type = 'whisper';
+  if ((type === 'apparition' || type === 'approach' || type === 'behind') && monD < 18) type = 'whisper';
   switch (type) {
     case 'apparition': {
       const spot = findSpotAhead(7, 15);
@@ -826,6 +909,7 @@ function runScare(t, forced) {
           if (!spot || !S.me?.alive) return;
           showGhost(spot.x, spot.z, performance.now() / 1000 + 0.4, 'face');
           audio.stinger(0.95); audio.screech(spot.x, spot.z, 0.5); S.red = 0.8; S.shake = 1;
+          fxFlash('#fff', 0.75, 200); fxGlitch(140); later(0.2, () => fxFace(50, 0.6));
           later(0.42, () => { S.flickUntil = performance.now() / 1000 + 0.15; hideGhost(); });
         });
       }
@@ -839,11 +923,46 @@ function runScare(t, forced) {
       break;
     }
     case 'slam': if (!slamNearestDoor(S.me.x, S.me.z, 14)) audio.bang(S.me.x + rnd(-8, 8), S.me.z + rnd(-8, 8)); break;
-    case 'faceflash': {
-      const ff = $('faceflash');
-      if (!ff.firstChild) ff.appendChild(scareCanvas());
-      ff.style.display = 'block'; ff.style.opacity = 0.55; audio.stinger(0.7); S.red = 0.5;
-      setTimeout(() => (ff.style.display = 'none'), 110);
+    case 'faceflash': { // three hard cuts to her face between white flashes
+      audio.stinger(0.8); S.red = 0.6; S.shake = 0.8;
+      for (let k = 0; k < 3; k++) setTimeout(() => { fxFlash(k === 2 ? '#a00000' : '#fff', 0.9, 120); setTimeout(() => fxFace(70, 0.8 - k * 0.15), 60); }, k * (FX.calm ? 500 : 190));
+      setTimeout(() => fxGlitch(160), 420);
+      break;
+    }
+    case 'subliminal': { // you are not sure you saw it
+      fxFace(40, 0.55); audio.stinger(0.3); S.red = 0.35;
+      later(0.3, () => { fxGlitch(90); fxFace(30, 0.35); });
+      break;
+    }
+    case 'behind': { // she breathes right behind you; turn around and she is there
+      const f = camForward();
+      const x = camera.position.x - f.x * 1.3, z = camera.position.z - f.z * 1.3;
+      if (isWall(S.map, S.me.L, Math.floor(x / CELL), Math.floor(z / CELL)) || !lineOfSight(S.map, S.me.L, camera.position.x, camera.position.z, x, z)) { audio.whisper(0, 0.5, 1.6); break; }
+      showGhost(x, z, t + 5, 'behind');
+      audio.whisper(0, 0.55, 1.8); audio.breath(0.3); later(1.2, () => audio.breath(0.35));
+      break;
+    }
+    case 'approach': { // lights die; each flicker of your torch she is closer
+      const dists = [9, 6.5, 4, 2.2], spots = dists.map((d) => findSpotAhead(d - 0.6, d));
+      if (spots.some((p) => !p) || !findSpotAhead(0.8, 1.0)) { runScare(t, 'blackout'); return; }
+      S.lightsOutUntil = t + 3.2; S.torchCtl = { until: t + 3, k: 0 }; audio.buzz(0.6, 0.12); audio.click();
+      spots.forEach((sp, k) => later(0.6 + k * 0.45, () => {
+        if (!S.me?.alive) return;
+        const now = performance.now() / 1000;
+        showGhost(sp.x, sp.z, now + 10, 'strobe');
+        S.torchCtl = { until: now + (FX.calm ? 0.25 : 0.09), k: 1.6 };
+        later(FX.calm ? 0.25 : 0.09, () => { S.ghost.visible = false; S.torchCtl = { until: performance.now() / 1000 + 3, k: 0 }; });
+        audio.drum(); audio.heartbeat(0.6 + k * 0.15);
+      }));
+      later(0.6 + dists.length * 0.45, () => {
+        if (!S.me?.alive) { S.torchCtl = null; return; }
+        const sp = findSpotAhead(0.8, 1.0), now = performance.now() / 1000;
+        if (sp) showGhost(sp.x, sp.z, now + 0.35, 'face');
+        S.torchCtl = { until: now + 0.35, k: 2 };
+        audio.stinger(1); audio.screech(S.me.x, S.me.z, 0.7); S.shake = 1.5; S.red = 1;
+        fxFlash('#fff', 1, 260); fxGlitch(180); later(0.12, () => fxFace(80, 0.8));
+        later(0.35, () => { hideGhost(); S.torchCtl = null; S.lightsOutUntil = 0; S.flickUntil = performance.now() / 1000 + 0.6; });
+      });
       break;
     }
   }
@@ -852,6 +971,21 @@ function runScare(t, forced) {
 function updateScares(dt, t) {
   for (let k = S.timers.length - 1; k >= 0; k--) if (t >= S.timers[k].at) { const fn = S.timers[k].fn; S.timers.splice(k, 1); fn(); }
   if (!S.me.alive || S.me.escaped) return;
+  if (t > (S.nextCall || 0)) {
+    S.nextCall = t + 0.5;
+    let best = null, bd = 6.5;
+    for (const tl of S.world.talismans.values()) {
+      if (tl.taken || tl.L !== S.me.L) continue;
+      const d = Math.hypot(tl.x - S.me.x, tl.z - S.me.z); if (d < bd) { bd = d; best = tl; }
+    }
+    if (best && t > (S.nextWhisperItem || 0)) {
+      S.nextWhisperItem = t + rnd(6, 10);
+      const f = camForward(), dx = best.x - S.me.x, dz = best.z - S.me.z;
+      const pan = Math.max(-1, Math.min(1, (dx * -f.z + dz * f.x) / (bd || 1))); // + = to your right
+      audio.whisper(pan, 0.1 + 0.14 * (1 - bd / 6.5), 1.6);
+      if (bd < 3.5 && S.me.fl) S.flickUntil = Math.max(S.flickUntil, t + 0.25);
+    }
+  }
   if (t > S.nextScare) {
     if (S.mon.state === 'chase' && S.mon.target === S.myId) S.nextScare = t + 8;
     else { runScare(t); S.nextScare = t + rnd(22, 45) - S.progress * 2.5; }
@@ -862,9 +996,14 @@ function updateScares(dt, t) {
     const dx = S.ghost.position.x - camera.position.x, dz = S.ghost.position.z - camera.position.z, d = Math.hypot(dx, dz);
     const f = camForward(); const dot = (dx * f.x + dz * f.z) / (d || 1);
     if (gs.kind === 'far') {
-      if (dot > 0.88 && !gs.seen) { gs.seen = true; audio.stinger(0.5); S.shake = 0.3; gs.until = Math.min(gs.until, t + 0.7); }
+      if (dot > 0.88 && !gs.seen) { gs.seen = true; audio.stinger(0.5); S.shake = 0.3; gs.until = Math.min(gs.until, t + 0.7); fxGlitch(80); }
       if (S.me.fl && dot > 0.97) { gs.lookT += dt; if (gs.lookT > 0.2) gs.until = Math.min(gs.until, t + 0.08); }
       if (d < 5.5) gs.until = t;
+    }
+    if (gs.kind === 'behind' && !gs.seen && dot > 0.72) {
+      gs.seen = true; gs.until = t + 0.3;
+      audio.stinger(1); audio.screech(S.ghost.position.x, S.ghost.position.z, 0.8); S.shake = 1.4; S.red = 0.9;
+      fxFlash('#fff', 0.95, 220); fxGlitch(150); later(0.1, () => fxFace(60, 0.7));
     }
     if (t > gs.until) { hideGhost(); if (gs.kind === 'far') S.flickUntil = t + 0.18; }
   }
@@ -874,7 +1013,8 @@ let scareCv = null;
 function scareCanvas() { if (!scareCv) scareCv = TX.jumpscareCanvas(); const c = document.createElement('canvas'); c.width = c.height = 1024; c.getContext('2d').drawImage(scareCv, 0, 0); return c; }
 
 function doJumpscare(mx, mz) {
-  S.jumpscare = true; S.me.alive = false;
+  S.jumpscare = true; S.me.alive = false; S.torchCtl = null; hideGhost();
+  fxFlash('#fff', 1, 380); fxGlitch(220);
   audio.setChase(false);
   // snap the camera onto the monster's face
   const dx = mx - S.me.x, dz = mz - S.me.z;
@@ -890,12 +1030,13 @@ function doJumpscare(mx, mz) {
     const t0 = performance.now();
     const anim = () => {
       const k = (performance.now() - t0) / 1000;
-      if (k > 1.9) { el.style.display = 'none'; return; }
+      if (k > 1.9) { el.style.display = 'none'; fxFlash('#fff', 1, 600); return; }
       const s = 1 + k * 0.35 + Math.random() * 0.08;
       c.style.transform = `translate(calc(-50% + ${rnd(-30, 30)}px), calc(-50% + ${rnd(-30, 30)}px)) scale(${s}) rotate(${rnd(-3, 3)}deg)`;
       const inv = Math.random() < 0.12;
       c.style.filter = `${inv ? 'invert(1) ' : ''}contrast(${rnd(1.2, 2)}) saturate(${rnd(1, 3)}) hue-rotate(${Math.random() < 0.2 ? rnd(-30, 30) : 0}deg)`;
       el.style.opacity = Math.random() < 0.1 ? 0.3 : 1;
+      if (Math.random() < 0.06) fxFlash(Math.random() < 0.5 ? '#fff' : '#b00000', 0.7, 90);
       requestAnimationFrame(anim);
     };
     anim();
@@ -1183,10 +1324,11 @@ function updateLights(dt, t) {
   if (me.alive && me.battery < 15 && Math.random() < 0.06) k = 0.15;
   if (monD < 9 && S.mon.state !== 'dormant' && Math.random() < 0.2 * (1 - monD / 9) * 2) k = Math.random() * 0.3;
   if (t < S.flickUntil) k = Math.random() < 0.08 ? 0.3 : 0;
+  if (S.torchCtl && t < S.torchCtl.until) k = S.torchCtl.k;
   if (S.jumpscare) k = 1;
   const batt = me.alive ? 0.55 + 0.45 * Math.min(1, me.battery / 30) : 1;
   flashlight.intensity = fl ? S.tune.fl * k * batt : 0;
-  playerGlow.intensity = S.jumpscare ? 3 : me.hidden ? 0.06 : 1.2;
+  playerGlow.intensity = S.jumpscare ? 3 : me.hidden ? 0.06 : (S.torchCtl && t < S.torchCtl.until && S.torchCtl.k === 0) ? 0 : 1.2;
   if (S.viewmodel) {
     const vm = S.viewmodel;
     vm.g.visible = me.alive && !me.escaped && !me.hidden && !S.jumpscare && S.spectating === null;

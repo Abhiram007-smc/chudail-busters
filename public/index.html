@@ -87,6 +87,8 @@
     background: linear-gradient(transparent 31px, rgba(80,90,140,.22) 32px) 0 14px / 100% 32px, radial-gradient(ellipse at 30% 20%, #e4dcc4, #c9bf9f 70%, #a89c7a);
     box-shadow: 0 20px 60px #000, inset 0 0 60px rgba(90,60,20,.35); }
   #note .text { font-family: 'Homemade Apple', cursive; font-size: 19px; line-height: 32px; white-space: pre-wrap; }
+  #noteSigil { display: none; width: 120px; height: 120px; margin: 10px auto 0; opacity: .85; transform: rotate(4deg); }
+  #clues .sg { width: 18px; height: 18px; vertical-align: -4px; margin-left: 4px; filter: invert(1) sepia(1) saturate(3) hue-rotate(-40deg) brightness(.9); }
   #note .hint { margin-top: 26px; font-size: 12px; letter-spacing: .3em; color: #6a5a48; text-align: right; }
   #team div { margin-bottom: 6px; text-shadow: 0 0 6px #000; }
   #team .dead { text-decoration: line-through; opacity: .5 }
@@ -144,8 +146,21 @@
       radial-gradient(ellipse 80% 60% at 50% 70%, transparent 45%, rgba(0,0,0,.9) 90%),
       linear-gradient(to bottom, #060505 0, #0b0908 38%, rgba(30,28,24,.9) 41%, transparent 46%, transparent 92%, #050505 97%); }
   #redflash { position: fixed; inset: 0; z-index: 7; pointer-events: none; background: radial-gradient(transparent 30%, rgba(160,0,0,.8)); opacity: 0; }
-  #loading { z-index: 30; background: #000; }
-  #loading p { letter-spacing: .5em; color: #6d675c; animation: flick 2s infinite; }
+  /* ---------- loading: the house lets you in ---------- */
+  #loading { z-index: 30; background: radial-gradient(ellipse at 50% 55%, #140605 0%, #050202 50%, #000 85%); overflow: hidden; }
+  #loading .lface { position: absolute; left: 50%; top: 50%; height: 115vh; transform: translate(-50%,-50%) scale(1.05); opacity: 0; filter: grayscale(.4) contrast(1.6) brightness(.7); pointer-events: none; transition: opacity .9s; }
+  #loading .lhindi { position: relative; font-family: 'Eczar', serif; font-weight: 800; font-size: clamp(64px, 13vw, 150px); color: #7a0909; filter: url(#rough);
+    text-shadow: 0 0 34px rgba(190,0,0,.55), 0 6px 0 #1c0000; animation: lflick 3.1s infinite; }
+  @keyframes lflick { 0%,8%,10%,47%,49%,74%,77%,100% { opacity: 1; transform: none } 9% { opacity: .1; transform: translateX(-6px) skewX(8deg) } 48% { opacity: .35 } 75% { opacity: .05; transform: translateX(9px) } 76% { opacity: .9 } }
+  #loading .lline { min-height: 1.6em; margin-top: 18px; font-family: 'Homemade Apple', cursive; font-size: clamp(15px, 2.4vw, 22px); color: #b9ad94; letter-spacing: .04em; text-shadow: 0 0 12px rgba(0,0,0,.9); text-align: center; padding: 0 16px; }
+  #loading .lbar { position: relative; width: min(420px, 74vw); height: 2px; margin-top: 34px; background: #1d0a08; }
+  #loading .lbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #3a0303, #b00d0d); box-shadow: 0 0 12px rgba(200,0,0,.7); transition: width .4s; }
+  #loading .lbar b { position: absolute; top: 2px; width: 3px; border-radius: 0 0 3px 3px; background: #8a0b0b; animation: drip 3.5s ease-in infinite; }
+  #loading .lhint { position: absolute; bottom: 26px; width: 100%; text-align: center; font-size: 11px; letter-spacing: .4em; color: #4a443c; text-transform: uppercase; }
+  #loading .lwarn { position: absolute; top: 22px; width: 100%; text-align: center; font-size: 11px; letter-spacing: .25em; color: #5a3a34; text-transform: uppercase; }
+  #fxflash { position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: #fff; }
+  .chk { display: flex; gap: 10px; align-items: center; margin: -4px 0 16px; font-size: 12px; color: var(--dim); letter-spacing: .12em; cursor: pointer; }
+  .chk input { accent-color: #8a0b0b; width: 16px; height: 16px; }
   .row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
   .row input[type=range] { flex: 1; accent-color: #8a0b0b; }
   .row span { font-size: 12px; color: var(--dim); letter-spacing: .2em; width: 120px; }
@@ -161,7 +176,7 @@
   <div class="sub">a co-op horror for 1 to 6 aatma</div>
   <div class="panel">
     <p>Ashgrove Sanatorium closed in 1974, the night the staff vanished. The patients whispered about a <i>chudail</i>: a woman with long black hair whose feet point backwards. She still walks the wards. She doesn't stop and she never sleeps.</p>
-    <p>Read the <span style="color:#e6dcc2">notes</span> the staff left behind: they say where the bones are hidden. Find the <span style="color:#ff8a3a">five bone effigies</span> to break the seal on the foyer door, then get out. <span style="color:#c44">It hears you running. It sees your light.</span> Shine your torch in its face and it slows down, but then it knows exactly where you are.</p>
+    <p>Somewhere below the wards she drew a <span style="color:#ff8a3a">pentagram</span>. It wants five gifts. The staff hid them all over the house and left <span style="color:#e6dcc2">riddles</span> and marks on the walls to find them again. Fill the star, trap her in it, then get out. <span style="color:#c44">It hears you running. It sees your light.</span> Shine your torch in its face and it slows down, but then it knows exactly where you are.</p>
     <label for="name">Your name</label>
     <input id="name" type="text" maxlength="14" placeholder="Survivor" autocomplete="off" />
     <button id="joinBtn">Enter the asylum</button>
@@ -189,15 +204,23 @@
     <div class="share" id="share">Loading invite link…</div>
     <div class="row"><span>Mouse</span><input type="range" id="sens" min="0.4" max="3" step="0.05" value="1.2" /></div>
     <div class="row"><span>Volume</span><input type="range" id="vol" min="0" max="1.2" step="0.05" value="0.9" /></div>
+    <label class="chk"><input type="checkbox" id="calm" /> Reduce flashing (photosensitivity)</label>
     <button id="startBtn">Begin</button>
     <div class="warn">Anyone can press Begin. Late joiners spawn in the foyer.</div>
   </div>
 </div>
 
-<div id="loading" class="screen"><p>DESCENDING</p></div>
+<div id="loading" class="screen">
+  <div class="lwarn" id="lwarn">This game has sudden flashing images</div>
+  <div class="lhindi">चुड़ैल</div>
+  <div class="lline" id="lline"></div>
+  <div class="lbar"><i id="lprog"></i><b style="left:22%;--h:26px"></b><b style="left:61%;--h:40px;animation-delay:1.3s"></b><b style="left:83%;--h:18px;animation-delay:2.4s"></b></div>
+  <div class="lhint" id="lhint">the house is letting you in</div>
+</div>
+<div id="fxflash"></div>
 
 <div id="hud">
-  <div id="effigies">THE STAR<div class="icons" id="icons"></div><div id="objective">Find the bone effigies. Stay quiet.</div><div id="clues"></div></div>
+  <div id="effigies">THE STAR<div class="icons" id="icons"></div><div id="objective">Find the five gifts. Stay quiet.</div><div id="clues"></div></div>
   <div id="team"></div>
   <div id="floorTag"></div>
   <div id="bars">
@@ -213,7 +236,7 @@
 </div>
 <div id="vent"></div>
 <div id="redflash"></div>
-<div id="note"><div class="paper"><div class="text" id="noteText"></div><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
+<div id="note"><div class="paper"><div class="text" id="noteText"></div><img id="noteSigil" alt="" /><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
 
 <div id="resume" class="screen"><div id="brief"></div><h2>CLICK TO RESUME</h2><p>It won't wait for you.</p></div>
 

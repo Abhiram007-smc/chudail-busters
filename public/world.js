@@ -401,10 +401,18 @@ export function buildWorld(scene, map) {
     m.rotation.x = -Math.PI / 2; m.rotation.z = b.r; m.position.set(b.x, 0.012, b.z); m.receiveShadow = true; lvl(b.L).add(m); cullable(m, b.x, b.z);
   }
   world.bloodMats = bloodMats;
+  const sigilMats = new Map();
   for (const w of map.writings) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.975), decalMat(TX.writingCanvas(w.text)));
-    const cx = (w.i + 0.5) * CELL + w.dx * (CELL / 2 - 0.015), cz = (w.j + 0.5) * CELL + w.dz * (CELL / 2 - 0.015);
-    m.position.set(cx, 1.55 + ((w.seed % 100) / 100 - 0.5) * 0.4, cz);
+    let m;
+    if (w.sigil) { // her sign: small, low, easy to walk past
+      if (!sigilMats.has(w.sigil)) sigilMats.set(w.sigil, decalMat(TX.sigilCanvas(w.sigil, 'wall')));
+      const sz = 0.42 + (w.seed % 7) * 0.03;
+      m = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), sigilMats.get(w.sigil));
+    } else m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.975), decalMat(TX.writingCanvas(w.text)));
+    const along = w.sigil ? (((w.seed >> 3) % 100) / 100 - 0.5) * 1.6 : 0; // slide along the wall
+    const cx = (w.i + 0.5) * CELL + w.dx * (CELL / 2 - 0.015) + (w.dz ? along : 0), cz = (w.j + 0.5) * CELL + w.dz * (CELL / 2 - 0.015) + (w.dx ? along : 0);
+    m.position.set(cx, w.sigil ? 0.55 + ((w.seed % 100) / 100) * 0.9 : 1.55 + ((w.seed % 100) / 100 - 0.5) * 0.4, cz);
+    if (w.sigil) m.rotation.z = ((w.seed % 13) / 13 - 0.5) * 0.5;
     m.rotation.y = Math.atan2(-w.dx, -w.dz);
     m.receiveShadow = true; lvl(w.L).add(m); cullable(m, cx, cz);
   }
@@ -484,12 +492,14 @@ export function buildWorld(scene, map) {
     for (const k of [0, 1]) {
       const x = k ? 0.22 : -0.22, h = 0.12 + rng() * 0.1;
       cyl(0.025, h, waxMat, x, 0.58 + h / 2, -0.18, stool);
-      const f = flameSprite(); f.position.set(x, 0.58 + h + 0.05, -0.18); stool.add(f); flames.push(f);
+      if (k) continue; // one candle has burned out; the other gutters, barely
+      const f = flameSprite(); f.position.set(x, 0.58 + h + 0.04, -0.18); stool.add(f); flames.push(f);
     }
     const item = makeItem(t.kind); item.position.y = 0.58; g.add(item);
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff6a30, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    halo.scale.setScalar(1.5); halo.position.y = 0.8; g.add(halo);
-    const src = { x: t.x, y: 1.2 + t.L * FLOOR_H, z: t.z, L: t.L, color: new THREE.Color(0xff8a3a), base: 4, dist: 8, flicker: false, candle: true, dead: false, phase: rng() * 100, kind: 'candle', level: 1 };
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff6a30, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(0.5); halo.position.y = 0.8; g.add(halo);
+    // a faint candle glow you only notice once you are in the room
+    const src = { x: t.x, y: 0.9 + t.L * FLOOR_H, z: t.z, L: t.L, color: new THREE.Color(0xff8a3a), base: 0.9, dist: 3.2, flicker: false, candle: true, dead: false, phase: rng() * 100, kind: 'candle', level: 1 };
     world.lightSources.push(src);
     world.talismans.set(t.id, {
       group: g, item, stool, flames, halo, src, x: t.x, z: t.z, L: t.L, kind: t.kind, name: t.name, taken: false,
@@ -679,9 +689,8 @@ export function buildWorld(scene, map) {
     for (const tl of world.talismans.values()) {
       if (tl.taken) continue;
       tl.item.rotation.y += dt * 0.4;
-      tl.flames.forEach((f, k) => { const q = 0.9 + Math.sin(t * 13 + k * 3) * 0.1 + Math.random() * 0.08; f.scale.set(0.12 * q, 0.2 * q, 1); });
+      tl.flames.forEach((f, k) => { const q = Math.random() < 0.04 ? 0.15 : 0.75 + Math.sin(t * 13 + k * 3) * 0.12 + Math.random() * 0.1; f.scale.set(0.07 * q, 0.12 * q, 1); });
       if (tl.item.userData.flame) tl.item.userData.flame.scale.set(0.12, 0.22 + Math.random() * 0.05, 1);
-      tl.halo.material.opacity = 0.3 + Math.sin(t * 7) * 0.05;
     }
     {
       const S = world.shrine;

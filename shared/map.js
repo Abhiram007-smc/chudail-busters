@@ -50,15 +50,30 @@ const LEVEL_TYPES = {
   1: ['ward', 'ward', 'nursery', 'bath', 'storage', 'office', 'surgery', 'nursery'],
 };
 
+// Clues never name the room. They describe what kind of room it is and roughly which floor, and every
+// item has her sign: the same mark is drawn on the note and scratched on the walls by that room's door
+// and inside it, next to the item.
 const CLUE_TEMPLATES = [
-  'Dr. Hale hid the {ITEM} in the {ROOM}, on the {FLOOR}, {WING}. He said it would keep her calm.\n\nIt did not keep her calm.',
-  'If anyone finds this: the {ITEM} is in the {ROOM} ({FLOOR}, {WING}).\nTake it down to the star. She knows the moment it is lifted.',
-  'Night log, 3:12 am.\nSomething moving in the {ROOM} on the {FLOOR}. The {ITEM} is still in there. I am not going in there.',
-  'Patient 41 keeps drawing the {ITEM}. Over and over. Always in the {ROOM}, {FLOOR}, {WING}.\nShe has never left her bed.',
-  'Five gifts for the star in the basement.\nI found the {ITEM} in the {ROOM} ({FLOOR}, {WING}) but I heard her coming and put it back.\nI am so sorry.',
-  'Chaplain\'s note.\nThe {ITEM} was sealed in the {ROOM}, {FLOOR}, {WING}. Let it stay there. Some things should not be finished.',
-  'Maintenance: candles keep relighting by themselves in the {ROOM} ({FLOOR}). Something on the shelf. A {ITEM}?',
+  "Dr. Hale took the {ITEM} away from her and hid it {RIDDLE}, {FLOOR}.\nHe scratched her sign beside it so he could find it again.\nThis sign:",
+  "Night log, 3:12 am.\nThe new nurse carried the {ITEM} {RIDDLE}. {FLOOR_CAP}.\nShe never came back out. There are scratches on the wall by that door. Like this:",
+  "Patient 41 draws the same sign over and over.\nShe whispers that her {ITEM} is {RIDDLE}, {FLOOR}.\nShe says the walls there are marked.",
+  "Five gifts for the star.\nThe {ITEM} is {RIDDLE}, {FLOOR}. Look for her sign on the walls near it.\nI heard her coming and put it back. I am so sorry.",
+  "Chaplain's note.\nI sealed the {ITEM} away {RIDDLE}, {FLOOR}, and marked the door so no one would go in.\nThe mark:",
+  "Maintenance, again: the candles keep relighting by themselves {RIDDLE}. {FLOOR_CAP}.\nAnd every morning the same scratches on the wall:",
 ];
+const RIDDLES = {
+  ward: ['where they lay in rows and nobody came', 'where the beds still remember their shapes'],
+  office: ['at the desk where the doctor signed them in', 'where the doctor kept his secrets in a drawer'],
+  storage: ['behind the boxes nobody counts', 'with the things they did not need any more'],
+  bath: ['where the water never drains', 'where the tubs are stained and the taps still drip'],
+  chapel: ['where nobody prays any more', 'where the pews face an empty wall'],
+  nursery: ['where the cradles rock with no one in them', 'where the dolls watch the empty cribs'],
+  morgue: ['where the cold ones sleep on steel', 'where they kept the ones who stopped breathing'],
+  surgery: ['under the lamp where they cut', 'where the table has straps on it'],
+  records: ['among the names nobody reads', 'where every patient became a number in a file'],
+};
+const FLOOR_HINTS = { '-1': 'below the ground, where the air is wet', 0: 'on the floor with the front door', 1: 'up where the ceiling creaks' };
+const FLOOR_SHORT = { '-1': 'below', 0: 'ground floor', 1: 'above' };
 
 const LORE_NOTES = [
   'Admission record, 1971.\nPatient arrived at six feet tall.\n\nRecord, 1973: patient is now seven feet tall. Staff refuse to measure her again.',
@@ -381,12 +396,34 @@ function tryGenerate(seed) {
     return null;
   };
   const tmpl = CLUE_TEMPLATES.slice().sort(() => rng() - 0.5);
+  const cap = (x) => x[0].toUpperCase() + x.slice(1);
   talismans.forEach((t, n) => {
     const r = rooms[t.room];
     const sp = noteSpot(r.id); if (!sp) return;
-    const text = tmpl[n % tmpl.length].replace(/\{ROOM\}/g, r.label).replace(/\{WING\}/g, r.wing).replace(/\{FLOOR\}/g, r.floor).replace(/\{ITEM\}/g, t.name.toLowerCase());
-    notes.push({ id: 'n' + notes.length, ...sp, text, clue: t.id, about: `${t.name}: ${r.label}, ${r.floor}, ${r.wing}`, rot: rng() * 6.28 });
+    const riddle = pick(RIDDLES[r.type] || ['somewhere nobody goes']);
+    const text = tmpl[n % tmpl.length].replace(/\{ITEM\}/g, t.name.toLowerCase()).replace(/\{RIDDLE\}/g, riddle)
+      .replace(/\{FLOOR_CAP\}/g, cap(FLOOR_HINTS[r.L])).replace(/\{FLOOR\}/g, FLOOR_HINTS[r.L]);
+    notes.push({ id: 'n' + notes.length, ...sp, text, clue: t.id, sigil: t.kind, about: `${t.name}: "${riddle}", ${FLOOR_SHORT[r.L]}`, rot: rng() * 6.28 });
   });
+  // her sign, scratched on the walls: by each door of the item's room (corridor side) and inside, near the item
+  const solidAt = (L, i, j) => isWall(map, L, i, j);
+  const wallDirs = (L, i, j, not) => DIRS.filter(([dx, dz]) => solidAt(L, i + dx, j + dz) && !(not && dx === not[0] && dz === not[1]));
+  for (const t of talismans) {
+    const r = rooms[t.room];
+    for (const d of doors.filter((q) => q.room === r.id)) {
+      const ci = d.i + d.dx, cj = d.j + d.dz;
+      if (solidAt(d.L, ci, cj)) continue;
+      const dirs = wallDirs(d.L, ci, cj, [-d.dx, -d.dz]);
+      if (dirs.length) { const [dx, dz] = pick(dirs); writings.push({ i: ci, j: cj, dx, dz, L: d.L, sigil: t.kind, seed: Math.floor(rng() * 1e6) }); }
+    }
+    const ti = Math.floor(t.x / CELL), tj = Math.floor(t.z / CELL);
+    let best = null, bd = 1e9;
+    for (let j = r.y; j < r.y + r.h; j++) for (let i = r.x; i < r.x + r.w; i++) {
+      const dirs = wallDirs(r.L, i, j); if (!dirs.length) continue;
+      const dd = Math.hypot(i - ti, j - tj); if (dd < bd) { bd = dd; best = [i, j, dirs]; }
+    }
+    if (best) { const [dx, dz] = pick(best[2]); writings.push({ i: best[0], j: best[1], dx, dz, L: r.L, sigil: t.kind, seed: Math.floor(rng() * 1e6) }); }
+  }
   const lore = [...LORE_NOTES.slice(-3), ...LORE_NOTES.slice(0, -3).sort(() => rng() - 0.5).slice(0, 6)];
   for (const text of lore) { const sp = noteSpot(-1); if (sp) notes.push({ id: 'n' + notes.length, ...sp, text, rot: rng() * 6.28 }); }
 

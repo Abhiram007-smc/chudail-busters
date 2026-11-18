@@ -270,6 +270,24 @@ Original checklist:
 
 ---
 
+## 7b. Scares, ghost look, hidden clues, loading screen (branch `feature/scarier`, merged)
+
+- Screen fx in `public/main.js` (top): `fxFlash(color, peak, ms)`, `fxGlitch(ms)` (CSS filter/skew on the canvas),
+  `fxFace(ms, opacity)` (one frame of the jumpscare face). `FX.calm` (lobby checkbox "Reduce flashing", localStorage
+  `cb_calm`) softens all of them. `S.torchCtl = {until, k}` overrides the flashlight multiplier (used by scares).
+- New scares in `runScare`: `approach` (lights + torch die; on each torch flicker the ghost is closer: 9, 6.5, 4, 2.2 m, then
+  1 m with scream + white flash), `behind` (ghost 1.3 m behind you; turning to face her triggers the hit), `subliminal`,
+  and a 3-cut `faceflash`. The death jumpscare adds white/red strobes. Test hook: `window.__hm.runScare(type)`.
+- Ghost (`upgradeMonster` in `public/entities.js`): ~50 hair strand ribbons on a pivot that is counter-rotated every frame
+  so the hair hangs straight down when her head twitches (`strands.pivot`), a fresnel rim light via `addRim()`
+  (`onBeforeCompile`), smaller flaring eye glows, black smoke sprites, and a random "skipped frame" glitch.
+- Clues (`shared/map.js`): `CLUE_TEMPLATES` + `RIDDLES[roomType]` + `FLOOR_HINTS`; notes carry `sigil: kind`. Sigil
+  wall marks are extra `writings` entries with `sigil` (by each door of the item's room, corridor side, and on the wall
+  nearest the item). `TX.sigilCanvas(kind, 'wall'|'ink')` draws them. Items lost their halo and strong light; one
+  guttering candle and a faint 0.9-intensity glow remain. The client whispers (panned toward the item) within 6.5 m.
+- Loading screen (`#loading`, `startLoadingFx()` in main.js): min ~4.2 s, typed creepy lines, heartbeat, a subliminal
+  face, ends with a red flash + door slam.
+
 ## 8. Assets & credits
 See README "Credits". Characters by Quaternius (CC0 / one CC-BY "Soldier"), scream CC0 from Wikimedia Commons,
 fonts from Google Fonts (OFL). Monster built by `blender/build_characters.py`.
