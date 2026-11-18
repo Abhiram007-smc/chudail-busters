@@ -185,7 +185,9 @@ Original spec, kept for reference:
    `items`/`revive` by filtering map lists deterministically (e.g. keep the first `round(n*mult)` ids) on BOTH
    server and client (send the kept ids in `startMsg`).
 
-### 7.3 TODO, public/world.js
+### 7.3 DONE, public/world.js (levels in `world.levelGroups[L]`, stairs with steps + handrails, ritual item models via `world.makeItem(kind)`, the shrine with `setPlaced/setActive/bind`, colliders carry `L` as 5th element)
+
+Original spec:
 
 1. Build every level: loop `LEVELS`, offset all geometry by `y = L*FLOOR_H`. Skip floor quads for type-4 cells
    (stairwell holes) and ceiling quads for type-3 cells (ramps). Walls: build walls where a walkable cell (1,2,3)
@@ -215,7 +217,9 @@ Original spec, kept for reference:
    on the plinth.
 7. Remove the ROOM 41 heart (`world.heart`) and exit sigil runes text that mention bones if needed.
 
-### 7.4 TODO, public/main.js
+### 7.4 DONE, public/main.js (player `L`, `heightAt` camera, `stairTransition`, per-floor interactions, light pool + remote flashlights per floor, `updateLevels()` floor visibility, carry/place/drop/bound events, objectives + briefing, lobby difficulty buttons, floor tag in HUD)
+
+Original spec:
 
 1. Player state gets `L` (start 0) and uses `heightAt(map, L, x, z)` for camera height (+eye). After
    `resolveCircle(map, L, …)` call `stairTransition` and apply. Send `L` in `{t:'s'}`.
@@ -235,7 +239,24 @@ Original spec, kept for reference:
    `drop` (show item at body).
 8. Lobby: difficulty selector (4 buttons) visible to all; send `{t:'difficulty', key}`; show current difficulty.
 
-### 7.5 Acceptance checks
+### 7.5 Status of acceptance checks
+
+Verified:
+- Server end-to-end with a bot (`hard`): monster crossed floors 1→0→-1, 5 items placed, lure → bound → escape → win.
+- In the browser (port 3002 WIP server): walking up a staircase smoothly raises the camera 0→3 m and switches to the
+  upper floor; walking back down returns to the ground floor; floor tag updates; basement shrine renders (glowing
+  pentagram, plinths, candles, chains); picking up an item and placing it on a star point works (plinth shows the
+  item, star icon lights, messages); difficulty chosen in the lobby reaches the game; 60 FPS.
+
+NOT yet verified in a real browser playthrough (do these next, with the Browser pane visible, since a hidden pane pauses
+requestAnimationFrame and makes tests lie):
+- Lure stage visuals (`stage:'lure'`: star blaze, red column) and the `bound` cinematic (monster sinking, flash).
+- Dropped items (`drop` event) appearing at a dead player's body on the right floor.
+- Death/end screens on the new build (one test round ended server-side while the tab was hidden).
+- Crawler on upper/basement floors; spectator drone above the roof (all floors visible).
+- Then merge `feature/multifloor-shrine` into `main` and restart the live server.
+
+Original checklist:
 
 - A bot can walk from the foyer up a staircase (L 0→1) and down to the basement (L 0→-1) using only
   `{t:'s'}` updates driven by `bfsPath3` + `stairTransition` (write `bot` in a scratch file).
