@@ -288,6 +288,16 @@ Original checklist:
 - Loading screen (`#loading`, `startLoadingFx()` in main.js): min ~4.2 s, typed creepy lines, heartbeat, a subliminal
   face, ends with a red flash + door slam.
 
+## 7b2. She crawls on walls and the ceiling
+
+- Server (`updateMonster`, "climbing"): `m.crawl` 0 floor, 1 ceiling, 2 left wall, 3 right wall; random episodes in
+  wander/hunt (5-11 s) and often when a chase starts (2.5-4.5 s). Never on stair ramps. Within 2.6 m of the chased
+  player she drops (`ev mdrop`, 0.4 s stall); she cannot kill while climbing. Snapshot monster row index 9 = crawl.
+- Client: `updateMonster` finds the wall on that side (falls back to the ceiling for the rest of that climb when
+  there is none, e.g. doorways) and calls `monster.userData.setCrawl(mode, wallDist, WALL_H)`. In `upgradeMonster`
+  the model sits under `flip` (surface rotation/offset) and `P` (body laid flat), blended over ~0.5 s, with the
+  Crawler's spider-limb pose. Footsteps become `audio.skitter` while climbing.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

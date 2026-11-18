@@ -561,10 +561,10 @@ function applySnap(m) {
     if (!alive && r.alive) { r.alive = false; }
   }
   if (m.m) {
-    const [x, z, yaw, state, target, speed, lit, lunge, L] = m.m;
+    const [x, z, yaw, state, target, speed, lit, lunge, L, crawl] = m.m;
     if (S.mon.L !== L && S.mon.buf) S.mon.buf.length = 0;
     S.mon.L = L ?? 0;
-    Object.assign(S.mon, { tx: x, tz: z, tyaw: yaw, state, target, speed, lit: !!lit, lunge: !!lunge });
+    Object.assign(S.mon, { tx: x, tz: z, tyaw: yaw, state, target, speed, lit: !!lit, lunge: !!lunge, crawl: crawl || 0 });
     const mb = (S.mon.buf = S.mon.buf || []);
     if (mb.length && Math.hypot(mb[mb.length - 1].x - x, mb[mb.length - 1].z - z) > 6) mb.length = 0;
     pushSnap(mb, { t: performance.now(), x, z, yaw, pitch: 0 });
@@ -713,6 +713,13 @@ function onEvent(m) {
       message(`${nameOf(m.by)} placed the ${tl.name} on the star (${m.count}/${TALISMANS})`);
       S.world.exit.setProgress(m.count, false);
       buildIcons(); setObjective(); renderClues();
+      break;
+    }
+    case 'mdrop': { // she lets go of the ceiling / wall right in front of someone
+      if (S.me && (m.L ?? 0) === S.me.L && Math.hypot(m.x - S.me.x, m.z - S.me.z) < 12) {
+        audio.bang(m.x, m.z, 0.9); audio.screech(m.x, m.z, 0.7); S.shake = Math.max(S.shake, 0.9); S.red = Math.max(S.red, 0.5);
+        if (Math.hypot(m.x - S.me.x, m.z - S.me.z) < 5) { fxFlash('#fff', 0.55, 180); fxGlitch(110); }
+      }
       break;
     }
     case 'drop': {
@@ -1247,6 +1254,7 @@ function updateCrawler(dt, t) {
 function updateMonster(dt, t) {
   const m = S.mon, g = S.monster;
   if (S.jumpscare) {
+    g.userData.setCrawl?.(0, 1, WALL_H, true);
     g.position.set(m.x, heightAt(S.map, S.me.L, m.x, m.z) - 0.35, m.z); g.rotation.y = m.yaw;
     g.userData.update(dt, 0, 'chase', t);
     return;
@@ -1260,6 +1268,19 @@ function updateMonster(dt, t) {
   let my = heightAt(S.map, m.L || 0, m.x, m.z);
   if (m.boundT) { m.boundT += dt; my -= Math.min(3.2, Math.max(0, m.boundT - 1.5) * 0.45); } // bound: she burns and sinks into the star
   g.position.set(m.x, my, m.z); g.rotation.y = m.yaw;
+  // on the ceiling or a wall? (server says which; find the wall on that side, or use the ceiling if there is none)
+  let mode = m.crawl || 0, wallD = 1;
+  if (mode !== m.crawlWas) { m.crawlWas = mode; m.crawlCeil = false; }
+  if (mode >= 2 && !m.crawlCeil) {
+    const sd = mode === 3 ? 1 : -1, rx = Math.cos(m.yaw) * sd, rz = -Math.sin(m.yaw) * sd; // her right (or left)
+    const ci = Math.floor(m.x / CELL), cj = Math.floor(m.z / CELL), ax = Math.abs(rx) > Math.abs(rz);
+    if (isWall(S.map, m.L || 0, ci + (ax ? Math.sign(rx) : 0), cj + (ax ? 0 : Math.sign(rz)))) {
+      const plane = ax ? (ci + (rx > 0 ? 1 : 0)) * CELL : (cj + (rz > 0 ? 1 : 0)) * CELL;
+      wallD = clamp(Math.abs(plane - (ax ? m.x : m.z)) / Math.max(0.5, Math.abs(ax ? rx : rz)), 0.45, 2.2);
+    } else m.crawlCeil = true; // no wall here (doorway, open room): stay on the ceiling for this climb
+  }
+  if (mode >= 2 && m.crawlCeil) mode = 1;
+  g.userData.setCrawl?.(mode, wallD, WALL_H);
   const st = m.state === 'chase' && m.speed < 0.05 ? 'stall' : m.state === 'bound' ? 'stunned' : m.state;
   g.userData.update(dt, m.vis, st, t);
   // hide her if her floor isn't drawn (keep the root visible: it holds a light)
@@ -1267,7 +1288,11 @@ function updateMonster(dt, t) {
   for (const ch of g.children) if (!ch.isLight) ch.visible = shown;
   if (g.userData.glow && (!shown || (m.L || 0) !== S.camL)) g.userData.glow.intensity = 0;
   m.step += moved;
-  if (m.step > 1.5) { m.step = 0; audio.step(m.state === 'chase' ? 0.7 : 0.45, { x: m.x, z: m.z }, true); }
+  if (m.step > (m.crawl ? 0.9 : 1.5)) {
+    m.step = 0;
+    if (m.crawl) audio.skitter(m.x, m.z, m.state === 'chase' ? 0.7 : 0.45); // nails on plaster
+    else audio.step(m.state === 'chase' ? 0.7 : 0.45, { x: m.x, z: m.z }, true);
+  }
 }
 
 const tmpV = new THREE.Vector3();

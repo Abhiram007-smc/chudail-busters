@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
+  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -114,7 +114,7 @@ function startGame() {
   game.monster = {
     x: m.monsterSpawn.x, z: m.monsterSpawn.z, L: m.monsterSpawn.L, yaw: 0, state: 'dormant', target: null,
     goal: null, path: null, pi: 0, pathT: -9, goalKey: -1, stall: 0, lostT: 0, huntT: 0, feedT: 0,
-    lastSeen: null, farT: 0, stuckT: 0, lit: false, lunge: false, speed: 0,
+    lastSeen: null, farT: 0, stuckT: 0, lit: false, lunge: false, speed: 0, crawl: 0, crawlT: 10,
   };
   game.phase = 'playing';
   broadcast(startMsg());
@@ -291,7 +291,11 @@ function updateMonster(dt) {
 
   // --- state machine
   if (seen) {
-    if (m.state !== 'chase') { m.stall = 0.85; broadcast({ t: 'ev', e: 'chase', id: seen.id }); }
+    if (m.state !== 'chase') {
+      m.stall = 0.85; broadcast({ t: 'ev', e: 'chase', id: seen.id });
+      // sometimes she sees you and goes up the wall or onto the ceiling to come for you
+      if (!m.crawl && Math.random() < 0.4) { m.crawl = 1 + Math.floor(Math.random() * 3); m.crawlT = rand(2.5, 4.5); }
+    }
     m.state = 'chase'; m.target = seen.id; m.lostT = 0; m.huntLocker = null;
     m.lastSeen = { x: seen.x, z: seen.z, L: seen.L };
   } else if (m.state === 'chase') {
@@ -363,7 +367,23 @@ function updateMonster(dt) {
 
   // --- speed
   let speed = (m.state === 'chase' ? 3.55 : m.state === 'hunt' ? 2.6 : 1.5) + bonus;
+  // --- climbing: now and then she leaves the floor and crawls along the ceiling (1) or the left (2) / right (3)
+  // wall. It only changes how she moves and looks; sight, hearing and paths are the same as on the floor.
+  m.crawlT -= dt;
+  const onStair = cellType(map, m.L, cellOf(m.x), cellOf(m.z)) === 3;
+  const prey = m.state === 'chase' ? game.players.get(m.target) : null;
+  const nearPrey = prey && prey.L === m.L && Math.hypot(prey.x - m.x, prey.z - m.z) < 2.6;
+  if (m.crawl && (onStair || nearPrey || m.crawlT <= 0 || !['wander', 'hunt', 'chase'].includes(m.state))) {
+    if (nearPrey) { m.stall = Math.max(m.stall, 0.4); broadcast({ t: 'ev', e: 'mdrop', x: m.x, z: m.z, L: m.L }); } // drops down in front of you
+    m.crawl = 0; m.crawlT = rand(8, 16);
+  } else if (!m.crawl && m.crawlT <= 0) {
+    if (!onStair && !nearPrey && ['wander', 'hunt', 'chase'].includes(m.state) && Math.random() < (m.state === 'chase' ? 0.5 : 0.4)) {
+      m.crawl = 1 + Math.floor(Math.random() * 3); m.crawlT = m.state === 'chase' ? rand(2.5, 4.5) : rand(5, 11);
+    } else m.crawlT = rand(6, 14);
+  }
+
   speed *= d.speed;
+  if (m.crawl) speed *= m.state === 'chase' ? 1.08 : 1.25; // skittering
   m.lunge = false;
   if (m.state === 'chase' && seen && seenD < 3) { speed *= 1.3; m.lunge = true; }
   if (lit) speed *= 0.45;
@@ -392,7 +412,7 @@ function updateMonster(dt) {
   for (const p of targets) {
     // while the star burns, she cannot touch anyone standing inside it
     const safe = game.stage === 'lure' && p.L === map.shrine.L && Math.hypot(p.x - map.shrine.x, p.z - map.shrine.z) < map.shrine.r + 0.6;
-    if (!safe && !p.hid && p.L === m.L && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
+    if (!safe && !p.hid && !m.crawl && p.L === m.L && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
   }
 }
 
@@ -459,7 +479,7 @@ setInterval(() => {
   broadcast({
     t: 'snap',
     p: [...game.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +p.pitch.toFixed(3), p.fl ? 1 : 0, p.cr ? 1 : 0, p.alive ? 1 : 0, p.escaped ? 1 : 0, p.mv ? 1 : 0, p.sp ? 1 : 0, p.hid || 0, p.sn ? 1 : 0, p.L]),
-    m: m ? [+m.x.toFixed(2), +m.z.toFixed(2), +m.yaw.toFixed(3), m.state, m.target || 0, +m.speed.toFixed(2), m.lit ? 1 : 0, m.lunge ? 1 : 0, m.L] : null,
+    m: m ? [+m.x.toFixed(2), +m.z.toFixed(2), +m.yaw.toFixed(3), m.state, m.target || 0, +m.speed.toFixed(2), m.lit ? 1 : 0, m.lunge ? 1 : 0, m.L, m.crawl || 0] : null,
     c: c && c.state !== 'gone' ? [+c.x.toFixed(2), +c.z.toFixed(2), +c.yaw.toFixed(3), c.state, c.target || 0, c.L] : null,
   });
 }, TICK * 1000);

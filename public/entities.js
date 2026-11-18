@@ -370,7 +370,18 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
   const mat = addRim(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, color: ghost ? 0x4a4744 : 0x878177, emissive: ghost ? 0x06060a : 0x0c0f15 }), ghost ? 0x3a4668 : 0x6f88c4, 2.2);
   inst.traverse((o) => { if (o.isMesh) o.material = mat; });
   hips.visible = false;
-  root.add(inst);
+  // root -> flip (which surface: floor, ceiling, left/right wall) -> P (body laid flat for crawling) -> model
+  const flip = new THREE.Group(), P = new THREE.Group();
+  root.add(flip); flip.add(P); P.add(inst);
+  const cr = { mode: 0, w: 1, ceil: 3, k: 0, rz: 0, px: 0, py: 0, ph: 0 };
+  // mode 0 floor, 1 ceiling, 2 left wall, 3 right wall; w = distance from her to that wall; snap skips the blend
+  root.userData.setCrawl = (mode, w = 1, ceil = 3, snap = false) => {
+    cr.mode = mode; cr.w = w; cr.ceil = ceil;
+    if (snap) { cr.k = mode ? 1 : 0; cr.rz = crRz(mode); cr.px = crPx(); cr.py = crPy(); }
+  };
+  const crRz = (mode) => (mode === 1 ? Math.PI : mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0);
+  const crPx = () => (cr.mode === 2 ? -cr.w : cr.mode === 3 ? cr.w : 0);
+  const crPy = () => (cr.mode === 1 ? cr.ceil - 0.02 : cr.mode >= 2 ? 1.55 : 0);
   // head (face, hair, glowing eyes) sits on the neck, tipped forward
   head.parent.remove(head); head.position.set(0, 0, 0); head.rotation.set(0, 0, 0);
   mountAt(B.head, head, new THREE.Vector3(0, 2.1, -0.43), new THREE.Euler(-0.35, 0, 0));
@@ -442,6 +453,34 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
     if (stun) { anim.tilt = Math.sin(t * 45) * 0.5; anim.turn = Math.sin(t * 37) * 0.4; }
     head.rotation.set(chase ? 0.35 : stun ? -0.3 : 0, anim.turn, anim.tilt);
     head.position.x = Math.sin(t * 31) * (chase ? 0.012 : 0.003);
+    // crawling on the ceiling / a wall: blend onto the surface, then spider limbs (same pose as the Crawler)
+    {
+      const rate = Math.min(1, dt * 5);
+      cr.k += ((cr.mode ? 1 : 0) - cr.k) * rate;
+      cr.rz += (crRz(cr.mode) - cr.rz) * rate; cr.px += (crPx() - cr.px) * rate; cr.py += (crPy() - cr.py) * rate;
+      flip.rotation.z = cr.rz; flip.position.set(cr.px, cr.py, 0);
+      P.rotation.x = -Math.PI / 2 * cr.k; P.position.set(0, 0.72 * cr.k, 1.1 * cr.k);
+      rag.visible = cr.k < 0.5;
+      if (cr.k > 0.5) {
+        cr.ph += (moving ? Math.max(2.5, speed) : 0.25) * dt * 3.4;
+        for (const [sfx, s] of LR) {
+          const a = Math.sin(cr.ph + (s > 0 ? 0 : Math.PI));
+          pose(B['upperarm' + sfx], 1.35 + a * 0.45, 0, s * 0.75);
+          pose(B['forearm' + sfx], -1.0 + Math.max(0, a) * 0.5);
+          pose(B['hand' + sfx], 0.7);
+          pose(B['fingers' + sfx], 0.3 + Math.sin(t * 18 + s) * 0.25);
+          pose(B['thigh' + sfx], 1.35 - a * 0.45, 0, s * 0.85);
+          pose(B['shin' + sfx], -1.9);
+          pose(B['foot' + sfx], 0.6);
+          pose(B['shoulder' + sfx], 0, 0, s * 0.15);
+        }
+        pose(B.spine, Math.sin(cr.ph * 2) * 0.06, Math.sin(cr.ph) * 0.08);
+        pose(B.chest, 0.15); pose(B.neck, 1.15);
+        // the head jerks around like it is not attached properly
+        head.rotation.set(0.35 + Math.sin(t * 23) * 0.05, Math.sin(t * 2.7) * 0.35 + anim.turn * 0.5, Math.sin(t * 9) * 0.25 + anim.tilt);
+        inst.position.y = 0;
+      }
+    }
     // hair hangs down whatever her head does (mostly), sways, and whips around when she runs
     head.getWorldQuaternion(_hq); root.getWorldQuaternion(_rq);
     strands.pivot.quaternion.identity().slerp(_hq.invert().multiply(_rq), 0.8);

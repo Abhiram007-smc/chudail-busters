@@ -81,6 +81,7 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 - **The Chudail:** tall, pale, long black hair, feet turned backwards. She carries a cold glow, so you can see her coming.
   - She hunts by sound and light. Sneaking is silent.
   - Shine your torch in her face and she slows down, but then she knows exactly where you are.
+  - She doesn't only run. Sometimes she climbs onto the ceiling or up a wall and skitters along it, upside down, hair hanging. Listen for nails on plaster, and look up. She drops down right in front of you.
 - **The Crawler:** wakes after the first ritual item is taken. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
 - **Lockers and wardrobes:** if she *sees you get in*, she drags you out. Break line of sight first.
 - **Aatma candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
