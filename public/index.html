@@ -6,7 +6,7 @@
 <title>चुड़ैल · CHUDAIL BUSTERS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&family=Butcherman&family=Eczar:wght@800&family=Kalam:wght@700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&family=Creepster&family=Eczar:wght@800&family=Kalam:wght@700&display=swap" rel="stylesheet" />
 <script type="importmap">
 { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
 </script>
@@ -27,7 +27,7 @@
   .drip { position: absolute; top: 78%; width: 6px; border-radius: 0 0 6px 6px; background: linear-gradient(#a00d0d, #5a0404); box-shadow: 0 0 8px rgba(160,0,0,.6); animation: drip 6s ease-in infinite; transform-origin: top; }
   .drip::after { content: ''; position: absolute; bottom: -5px; left: -2px; width: 10px; height: 10px; border-radius: 50%; background: #6a0606; }
   @keyframes drip { 0% { height: 0; opacity: 1 } 70% { opacity: 1 } 100% { height: var(--h); opacity: 0 } }
-  .title { font-family: 'Nosifer', 'Butcherman', serif; font-size: clamp(24px, 5.2vw, 60px); letter-spacing: .14em; margin: -6px 0 0 .14em; color: #d8cdb2; text-shadow: 0 0 18px rgba(150,0,0,.7), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); }
+  .title { font-family: 'Nosifer', 'Creepster', serif; font-size: clamp(24px, 5.2vw, 60px); letter-spacing: .14em; margin: -6px 0 0 .14em; color: #d8cdb2; text-shadow: 0 0 18px rgba(150,0,0,.7), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); }
   .sub { color: var(--dim); letter-spacing: .4em; font-size: 13px; margin-bottom: 38px; text-transform: uppercase; }
   @keyframes flick { 0%,19%,21%,62%,64%,100% { opacity: 1 } 20%, 63% { opacity: .25 } 20.5% { opacity: .8 } }
   .panel { width: min(620px, 94vw); max-height: 92vh; overflow-y: auto; background: rgba(8,6,6,.72); border: 1px solid #2a1c18; padding: 26px 28px; box-shadow: 0 0 60px rgba(0,0,0,.9), inset 0 0 40px rgba(60,0,0,.15); }
@@ -65,7 +65,7 @@
   .diff button { font-size: 12px; padding: 9px 4px; letter-spacing: .15em; background: #0b0808; border-color: #3a2620; color: #8f8676; }
   .diff button.on { background: linear-gradient(#4a0808, #2a0303); color: #f0e6cc; border-color: #a01010; box-shadow: 0 0 14px rgba(160,0,0,.4); }
   .diff .tip { grid-column: 1 / -1; font-size: 11px; color: #6d675c; letter-spacing: .05em; }
-  #floorTag { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: 'Butcherman', serif; letter-spacing: .3em; font-size: 15px; color: #b9ae96; text-shadow: 0 0 10px #000; }
+  #floorTag { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: 'Creepster', serif; letter-spacing: .3em; font-size: 15px; color: #b9ae96; text-shadow: 0 0 10px #000; }
   .share { font-size: 13px; color: #8f8676; background: #0b0808; border: 1px dashed #3a2620; padding: 10px 12px; margin: 12px 0 18px; line-height: 1.7; word-break: break-all; }
   .share code { color: #e8c45a; font-family: inherit; font-size: 15px; }
 
@@ -99,16 +99,16 @@
   #prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 16px; letter-spacing: .2em; color: #e6dcc2; text-shadow: 0 0 10px #000; opacity: 0; transition: opacity .2s; }
   #prompt b { border: 1px solid #e6dcc2; padding: 1px 8px; margin-right: 8px; }
   #messages { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(640px, 60%); }
-  #messages div { font-family: 'Butcherman', 'IM Fell English SC', serif; font-size: 26px; letter-spacing: .1em; color: #e8dcc0; text-shadow: 0 0 12px #000, 0 0 30px #300; margin-bottom: 10px; animation: msg 5s forwards; }
+  #messages div { font-family: 'Creepster', 'IM Fell English SC', serif; font-size: 26px; letter-spacing: .1em; color: #e8dcc0; text-shadow: 0 0 12px #000, 0 0 30px #300; margin-bottom: 10px; animation: msg 5s forwards; }
   #messages div.red { color: #ff5a40; }
   @keyframes msg { 0% { opacity: 0; transform: translateY(6px) } 8% { opacity: 1; transform: none } 80% { opacity: 1 } 100% { opacity: 0 } }
   #spectate { position: absolute; bottom: 60px; width: 100%; text-align: center; font-size: 16px; letter-spacing: .25em; color: #b33; display: none; text-shadow: 0 0 10px #000; }
 
   #resume { background: rgba(0,0,0,.55); z-index: 8; cursor: pointer; }
-  #resume h2 { font-family: 'Butcherman', serif; font-size: 44px; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 0 20px rgba(150,0,0,.7); font-weight: normal; }
+  #resume h2 { font-family: 'Creepster', serif; font-size: 44px; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 0 20px rgba(150,0,0,.7); font-weight: normal; }
   #resume p { color: #8f8676; }
   #brief { display: none; width: min(620px, 92vw); background: rgba(8,6,6,.85); border: 1px solid #3a2620; padding: 22px 28px; margin-bottom: 18px; font-size: 14px; line-height: 1.6; color: #b9ae96; }
-  #brief .bh { font-family: 'Butcherman', serif; font-size: 22px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
+  #brief .bh { font-family: 'Creepster', serif; font-size: 22px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
   #brief ol, #brief ul { margin: 0 0 14px; padding-left: 22px; }
   #brief li { margin-bottom: 4px; }
   #brief b { color: #e6dcc2; }
@@ -129,7 +129,7 @@
   #death p { color: #6d675c; letter-spacing: .3em; opacity: 0; animation: fadein 2s 1.6s forwards; }
   @keyframes fadein { to { opacity: 1 } }
   #end { background: radial-gradient(#0d0606, #000 70%); z-index: 16; }
-  #end h1 { font-family: 'Butcherman', serif; font-size: clamp(36px, 7vw, 84px); letter-spacing: .12em; font-weight: normal; margin: 0 0 24px; }
+  #end h1 { font-family: 'Creepster', serif; font-size: clamp(36px, 7vw, 84px); letter-spacing: .12em; font-weight: normal; margin: 0 0 24px; }
   #end h1.win { color: #e6dcc2; text-shadow: 0 0 30px rgba(200,220,255,.4); }
   #end h1.lose { color: var(--blood); font-family: 'Nosifer', serif; letter-spacing: .05em; }
   #end ul { list-style: none; padding: 0; font-size: 20px; line-height: 2; text-align: center; }

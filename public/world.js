@@ -690,7 +690,7 @@ export function buildWorld(scene, map) {
       const placed = S.slots.filter((s) => s.item).length;
       S.starMat.emissiveIntensity = (S.active ? 2.6 + Math.sin(t * 6) * 0.8 : 0.5 + placed * 0.3 + Math.sin(t * 2) * 0.15) * (S.boundT ? 2 : 1);
       S.src.level = S.active ? 0.85 + Math.random() * 0.3 : 0.7 + Math.sin(t * 3) * 0.15;
-      S.columnMat.opacity += ((S.active ? 0.35 + Math.sin(t * 9) * 0.08 : 0) + S.flash * 0.6 - S.columnMat.opacity) * Math.min(1, dt * 3);
+      S.columnMat.opacity += ((S.active ? 0.16 + Math.sin(t * 9) * 0.05 : 0) + S.flash * 0.6 - S.columnMat.opacity) * Math.min(1, dt * 3);
       S.slots.forEach((s) => { if (s.item) s.item.rotation.y += dt * 0.6; });
       if (S.boundT) { S.boundT += dt; S.flash = Math.max(0, S.flash - dt * 0.4); }
     }

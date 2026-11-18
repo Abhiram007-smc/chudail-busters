@@ -614,7 +614,7 @@ function onEvent(m) {
         S.world.shrine.setActive();
         audio.rumble(1, 5); audio.whisper(0, 0.5, 3); S.shake = 1; S.red = 0.6;
         message('THE STAR IS AWAKE', 'red');
-        setTimeout(() => message('Bring her to it. Make her follow you into the centre.', 'red'), 2000);
+        setTimeout(() => message('Bring her to it. She cannot touch you inside the star.', 'red'), 2000);
         for (const b of S.world.bulbs) { b.color.set(0xff2010); b.flicker = true; }
       } else if (m.stage === 'escape') {
         S.exitOpen = true; S.world.exit.setProgress(TALISMANS, true);
@@ -714,7 +714,7 @@ function showBriefing() {
     <ol>
       <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff's notes say where.</li>
       <li><b>Carry them down to the shrine in the basement</b> and place one on each point of the star. If you die carrying one, you drop it.</li>
-      <li><b>Lure the Chudail into the centre of the star.</b> When it burns, make her chase you through it. She will be bound there.</li>
+      <li><b>Lure the Chudail into the centre of the star.</b> When it burns she cannot touch anyone standing inside it. Make her come to you; when she steps into the middle she is bound.</li>
       <li><b>Escape through the front door</b> on the ground floor.</li>
     </ol>
     <div class="bh">TO SURVIVE · ${esc((DIFFICULTY[S.difficulty] || DIFFICULTY.normal).label.toUpperCase())}</div>
@@ -918,6 +918,7 @@ function startSpectate() {
   if (S.phase !== 'playing') return;
   const list = aliveOthers();
   S.spectating = list.length ? list[0].id : -1;
+  $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME';
   $('spectate').style.display = 'block';
   if (document.pointerLockElement !== canvas) showScreen('resume'); else showScreen('');
 }
@@ -1436,4 +1437,5 @@ function adaptResolution(now) {
 requestAnimationFrame(frame);
 
 // debug hooks (used for automated testing)
+window.__hm.frame = frame; // lets automated tests step the game while the tab is hidden
 window.__hm.S = S; window.__hm.keys = keys; window.__hm.runScare = (type) => runScare(performance.now() / 1000, type);

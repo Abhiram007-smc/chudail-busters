@@ -235,7 +235,7 @@ function updateMonster(dt) {
   if (m.state === 'dormant') { m.state = 'wander'; m.goal = null; }
 
   // the trap: once the star is complete, she is bound if she steps into the centre
-  if (game.stage === 'lure' && m.L === map.shrine.L && Math.hypot(m.x - map.shrine.x, m.z - map.shrine.z) < map.shrine.center) {
+  if (game.stage === 'lure' && m.L === map.shrine.L && Math.hypot(m.x - map.shrine.x, m.z - map.shrine.z) < map.shrine.center + 0.9) {
     m.state = 'bound'; m.speed = 0; game.stage = 'escape'; game.exitOpen = true;
     if (game.crawler) game.crawler.state = 'gone';
     broadcast({ t: 'ev', e: 'bound', x: m.x, z: m.z });
@@ -373,7 +373,11 @@ function updateMonster(dt) {
   // --- steering
   let target = null;
   const chaseT = m.state === 'chase' ? game.players.get(m.target) : null;
-  if (chaseT && seen === chaseT && clearPath(m.L, m.x, m.z, chaseT.x, chaseT.z)) target = [chaseT.x, chaseT.z];
+  const sh = map.shrine;
+  const inStar = (e, pad) => e.L === sh.L && Math.hypot(e.x - sh.x, e.z - sh.z) < sh.r + pad;
+  // while the star burns, chasing someone inside it drags her into its centre
+  if (game.stage === 'lure' && chaseT && inStar(chaseT, 0.6) && inStar(m, 4)) target = [sh.x, sh.z];
+  else if (chaseT && seen === chaseT && clearPath(m.L, m.x, m.z, chaseT.x, chaseT.z)) target = [chaseT.x, chaseT.z];
   else {
     const goal = m.state === 'chase' ? m.lastSeen : m.goal;
     if (goal) target = followPath(m, goal, t);
@@ -386,7 +390,9 @@ function updateMonster(dt) {
 
   // --- kill (only while chasing, same floor)
   for (const p of targets) {
-    if (!p.hid && p.L === m.L && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
+    // while the star burns, she cannot touch anyone standing inside it
+    const safe = game.stage === 'lure' && p.L === map.shrine.L && Math.hypot(p.x - map.shrine.x, p.z - map.shrine.z) < map.shrine.r + 0.6;
+    if (!safe && !p.hid && p.L === m.L && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
   }
 }
 
