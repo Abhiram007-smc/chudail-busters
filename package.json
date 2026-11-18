@@ -1,0 +1,15 @@
+{
+  "name": "hollowmere",
+  "version": "1.0.0",
+  "description": "Hollowmere - a co-op multiplayer horror game for up to 6 players",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "online": "node server.js --online"
+  },
+  "dependencies": {
+    "three": "^0.187.0",
+    "ws": "^8.23.0"
+  }
+}

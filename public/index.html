@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HOLLOWMERE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&display=swap" rel="stylesheet" />
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
+<style>
+  :root { --blood: #8a0b0b; --bone: #d9cfb4; --dim: #6d675c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--bone); font-family: 'Courier Prime', 'Courier New', monospace; overflow: hidden; user-select: none; }
+  canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 10; }
+  .screen.show { display: flex; }
+  #grain { position: fixed; inset: 0; pointer-events: none; z-index: 9; opacity: .12; mix-blend-mode: screen; }
+
+  /* ---------- menu ---------- */
+  #menu { background: radial-gradient(ellipse at 50% 60%, #1a0d0b 0%, #070405 55%, #000 100%); }
+  .title { font-family: 'IM Fell English SC', serif; font-size: clamp(42px, 9vw, 112px); letter-spacing: .22em; margin: 0 0 6px .32em; color: #cfc4a8; text-shadow: 0 0 18px rgba(150,0,0,.6), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); animation: flick 6s infinite; }
+  .sub { color: var(--dim); letter-spacing: .4em; font-size: 13px; margin-bottom: 38px; text-transform: uppercase; }
+  @keyframes flick { 0%,19%,21%,62%,64%,100% { opacity: 1 } 20%, 63% { opacity: .25 } 20.5% { opacity: .8 } }
+  .panel { width: min(620px, 94vw); max-height: 92vh; overflow-y: auto; background: rgba(8,6,6,.72); border: 1px solid #2a1c18; padding: 26px 28px; box-shadow: 0 0 60px rgba(0,0,0,.9), inset 0 0 40px rgba(60,0,0,.15); }
+  .panel p { line-height: 1.6; color: #a99f8a; font-size: 14px; margin: 0 0 16px; }
+  label { font-size: 12px; letter-spacing: .25em; color: var(--dim); text-transform: uppercase; }
+  input[type=text] { width: 100%; margin: 8px 0 18px; padding: 12px 14px; font: inherit; font-size: 18px; color: var(--bone); background: #0b0808; border: 1px solid #3a2620; outline: none; }
+  input[type=text]:focus { border-color: var(--blood); }
+  button { font: inherit; font-size: 18px; letter-spacing: .3em; text-transform: uppercase; padding: 14px 20px; width: 100%; cursor: pointer; color: #f0e6cc; background: linear-gradient(#4a0808, #2a0303); border: 1px solid #7a1010; transition: .15s; }
+  button:hover { background: linear-gradient(#6a0a0a, #3a0404); box-shadow: 0 0 24px rgba(160,0,0,.5); }
+  button:disabled { opacity: .4; cursor: default; }
+  .controls { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; color: #8f8676; margin-top: 18px; }
+  .controls b { color: var(--bone); font-weight: normal; border: 1px solid #3a2a24; padding: 1px 7px; text-align: center; }
+  .warn { margin-top: 18px; font-size: 12px; color: #7a2a20; letter-spacing: .15em; text-align: center; }
+  .eyes { position: fixed; width: 60px; height: 14px; pointer-events: none; opacity: 0; transition: opacity 1.4s; z-index: 11; }
+  .eyes::before, .eyes::after { content: ''; position: absolute; top: 0; width: 6px; height: 6px; border-radius: 50%; background: #ff2a10; box-shadow: 0 0 12px 4px rgba(255,30,10,.6); }
+  .eyes::before { left: 12px } .eyes::after { right: 12px }
+
+  /* ---------- lobby ---------- */
+  #lobby { background: radial-gradient(ellipse at 50% 50%, #120a09, #000 75%); }
+  .plist { list-style: none; padding: 0; margin: 12px 0 18px; }
+  .plist li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #1d1412; font-size: 18px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
+  .slot { color: #3d332c; font-style: italic; }
+  .chars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 16px; }
+  .char { position: relative; cursor: pointer; border: 1px solid #2a1c18; background: #0b0808; padding: 4px 4px 6px; text-align: center; transition: .15s; }
+  .char:hover { border-color: #7a1010; }
+  .char.mine { border-color: #e6dcc2; box-shadow: 0 0 14px rgba(230,220,194,.25); }
+  .char img { width: 100%; aspect-ratio: 1 / 1.05; object-fit: cover; object-position: 50% 30%; display: block; filter: saturate(.55) brightness(.85); }
+  .char.mine img { filter: none; }
+  .char b { display: block; font-size: 14px; margin-top: 4px; color: #e6dcc2; }
+  .char i { display: block; font-size: 10px; letter-spacing: .1em; color: #6d675c; font-style: normal; }
+  .char .who { position: absolute; top: 6px; right: 6px; display: flex; gap: 3px; }
+  .char .who span { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+  .share { font-size: 13px; color: #8f8676; background: #0b0808; border: 1px dashed #3a2620; padding: 10px 12px; margin: 12px 0 18px; line-height: 1.7; word-break: break-all; }
+  .share code { color: #e8c45a; font-family: inherit; font-size: 15px; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; display: none; }
+  #hud.show { display: block; }
+  #effigies { position: absolute; top: 22px; left: 26px; font-size: 13px; letter-spacing: .3em; color: #9c917c; }
+  #effigies .icons { display: flex; gap: 8px; margin-top: 8px; }
+  #effigies .ic { width: 22px; height: 30px; border: 1px solid #3a2a24; display: grid; place-items: center; font-size: 16px; color: #2c2420; }
+  #effigies .ic.got { border-color: #a03010; color: #ff8a3a; text-shadow: 0 0 8px #ff4a10; box-shadow: inset 0 0 10px rgba(255,80,20,.3); }
+  #objective { font-family: 'IM Fell English SC', serif; margin-top: 12px; font-size: 17px; letter-spacing: .04em; color: #b9ae96; max-width: 360px; text-shadow: 0 0 6px #000; }
+  #team { position: absolute; top: 22px; right: 26px; text-align: right; font-size: 15px; font-weight: 700; }
+  #clues { margin-top: 14px; font-size: 13px; color: #a99f8a; max-width: 380px; line-height: 1.6; text-shadow: 0 0 6px #000; }
+  #clues .h { letter-spacing: .3em; font-size: 11px; color: #6d675c; }
+  #clues .done { text-decoration: line-through; opacity: .45; }
+  #note { position: fixed; inset: 0; z-index: 12; display: none; align-items: center; justify-content: center; pointer-events: none; background: radial-gradient(rgba(0,0,0,.35), rgba(0,0,0,.85)); }
+  #note.show { display: flex; }
+  #note .paper { width: min(520px, 88vw); min-height: 360px; padding: 46px 48px 30px; color: #2a2230; transform: rotate(-1.2deg);
+    background: linear-gradient(transparent 31px, rgba(80,90,140,.22) 32px) 0 14px / 100% 32px, radial-gradient(ellipse at 30% 20%, #e4dcc4, #c9bf9f 70%, #a89c7a);
+    box-shadow: 0 20px 60px #000, inset 0 0 60px rgba(90,60,20,.35); }
+  #note .text { font-family: 'Homemade Apple', cursive; font-size: 19px; line-height: 32px; white-space: pre-wrap; }
+  #note .hint { margin-top: 26px; font-size: 12px; letter-spacing: .3em; color: #6a5a48; text-align: right; }
+  #team div { margin-bottom: 6px; text-shadow: 0 0 6px #000; }
+  #team .dead { text-decoration: line-through; opacity: .5 }
+  #bars { position: absolute; bottom: 26px; left: 26px; width: 220px; font-size: 11px; letter-spacing: .3em; color: #8a816f; }
+  .bar { height: 5px; background: #1a1412; margin: 5px 0 12px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; background: #d9cfb4; transition: width .15s; }
+  #battery i { background: linear-gradient(90deg, #6a8a40, #c8e080); }
+  #battery.low i { background: #c03020; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(230,220,200,.45); }
+  #prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 16px; letter-spacing: .2em; color: #e6dcc2; text-shadow: 0 0 10px #000; opacity: 0; transition: opacity .2s; }
+  #prompt b { border: 1px solid #e6dcc2; padding: 1px 8px; margin-right: 8px; }
+  #messages { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(640px, 60%); }
+  #messages div { font-family: 'IM Fell English SC', serif; font-size: 26px; letter-spacing: .08em; color: #e8dcc0; text-shadow: 0 0 12px #000, 0 0 30px #300; margin-bottom: 10px; animation: msg 5s forwards; }
+  #messages div.red { color: #ff5a40; }
+  @keyframes msg { 0% { opacity: 0; transform: translateY(6px) } 8% { opacity: 1; transform: none } 80% { opacity: 1 } 100% { opacity: 0 } }
+  #spectate { position: absolute; bottom: 60px; width: 100%; text-align: center; font-size: 16px; letter-spacing: .25em; color: #b33; display: none; text-shadow: 0 0 10px #000; }
+
+  #resume { background: rgba(0,0,0,.55); z-index: 8; cursor: pointer; }
+  #resume h2 { font-family: 'IM Fell English SC', serif; font-size: 40px; letter-spacing: .25em; font-weight: normal; }
+  #resume p { color: #8f8676; }
+  #brief { display: none; width: min(620px, 92vw); background: rgba(8,6,6,.85); border: 1px solid #3a2620; padding: 22px 28px; margin-bottom: 18px; font-size: 14px; line-height: 1.6; color: #b9ae96; }
+  #brief .bh { font-family: 'IM Fell English SC', serif; font-size: 20px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
+  #brief ol, #brief ul { margin: 0 0 14px; padding-left: 22px; }
+  #brief li { margin-bottom: 4px; }
+  #brief b { color: #e6dcc2; }
+  kbd { font-family: inherit; border: 1px solid #6d675c; padding: 0 6px; color: #e6dcc2; }
+  #objective .h { letter-spacing: .3em; font-size: 11px; color: #6d675c; font-family: 'Courier Prime', monospace; margin-bottom: 4px; }
+  #objective .obj { font-size: 16px; color: #7d756a; }
+  #objective .obj.active { color: #f0e6cc; text-shadow: 0 0 10px rgba(255,120,60,.35); }
+  #objective .obj.done { color: #5a5248; text-decoration: line-through; }
+  #objective .n { color: #a99f8a; font-size: 14px; }
+
+  /* ---------- jumpscare / death / end ---------- */
+  #scare { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; background: #000; }
+  #scare canvas { position: absolute; left: 50%; top: 50%; height: 120vh; transform: translate(-50%,-50%); }
+  #faceflash { position: fixed; inset: 0; z-index: 19; pointer-events: none; display: none; background: #000; mix-blend-mode: normal; }
+  #faceflash canvas { position: absolute; left: 50%; top: 50%; height: 100vh; transform: translate(-50%,-50%); }
+  #death { background: #000; z-index: 15; }
+  #death h1 { font-family: 'Nosifer', 'IM Fell English SC', serif; color: var(--blood); font-size: clamp(40px, 8vw, 96px); font-weight: normal; letter-spacing: .1em; margin: 0; opacity: 0; animation: fadein 2.5s 0.4s forwards; text-shadow: 0 0 30px #500; }
+  #death p { color: #6d675c; letter-spacing: .3em; opacity: 0; animation: fadein 2s 1.6s forwards; }
+  @keyframes fadein { to { opacity: 1 } }
+  #end { background: radial-gradient(#0d0606, #000 70%); z-index: 16; }
+  #end h1 { font-family: 'IM Fell English SC', serif; font-size: clamp(36px, 7vw, 84px); letter-spacing: .12em; font-weight: normal; margin: 0 0 24px; }
+  #end h1.win { color: #e6dcc2; text-shadow: 0 0 30px rgba(200,220,255,.4); }
+  #end h1.lose { color: var(--blood); font-family: 'Nosifer', serif; letter-spacing: .05em; }
+  #end ul { list-style: none; padding: 0; font-size: 20px; line-height: 2; text-align: center; }
+  #end .small { color: #6d675c; font-size: 13px; letter-spacing: .3em; margin-top: 24px; }
+  #vent { position: fixed; inset: 0; z-index: 4; pointer-events: none; display: none;
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 50%, transparent 40%, rgba(0,0,0,.92) 85%),
+      linear-gradient(to bottom, #050505 0, #050505 22%, transparent 22%, transparent 78%, #050505 78%),
+      repeating-linear-gradient(to bottom, rgba(12,14,13,.96) 0 12px, transparent 12px 46px); }
+  #vent.show { display: block; }
+  #vent.bed { background:
+      radial-gradient(ellipse 80% 60% at 50% 70%, transparent 45%, rgba(0,0,0,.9) 90%),
+      linear-gradient(to bottom, #060505 0, #0b0908 38%, rgba(30,28,24,.9) 41%, transparent 46%, transparent 92%, #050505 97%); }
+  #redflash { position: fixed; inset: 0; z-index: 7; pointer-events: none; background: radial-gradient(transparent 30%, rgba(160,0,0,.8)); opacity: 0; }
+  #loading { z-index: 30; background: #000; }
+  #loading p { letter-spacing: .5em; color: #6d675c; animation: flick 2s infinite; }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .row input[type=range] { flex: 1; accent-color: #8a0b0b; }
+  .row span { font-size: 12px; color: var(--dim); letter-spacing: .2em; width: 120px; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="grain" width="256" height="256"></canvas>
+
+<div id="menu" class="screen show">
+  <div class="title">HOLLOWMERE</div>
+  <div class="sub">a co-op horror for 1 to 6 souls</div>
+  <div class="panel">
+    <p>Hollowmere Sanatorium closed in 1974, the night the staff vanished. Something tall still walks the wards. It doesn't stop and it never sleeps.</p>
+    <p>Read the <span style="color:#e6dcc2">notes</span> the staff left behind: they say where the bones are hidden. Find the <span style="color:#ff8a3a">five bone effigies</span> to break the seal on the foyer door, then get out. <span style="color:#c44">It hears you running. It sees your light.</span> Shine your torch in its face and it slows down, but then it knows exactly where you are.</p>
+    <label for="name">Your name</label>
+    <input id="name" type="text" maxlength="14" placeholder="Survivor" autocomplete="off" />
+    <button id="joinBtn">Enter the asylum</button>
+    <button id="specBtn" style="margin-top:10px;font-size:13px;padding:9px;background:#0b0808;border-color:#3a2620;color:#8f8676">Watch as hidden spectator</button>
+    <div class="controls">
+      <b>WASD</b><span>move</span><b>MOUSE</b><span>look</span>
+      <b>SHIFT</b><span>sprint (it will hear you)</span><b>CTRL</b><span>sneak: slow, silent walk</span>
+      <b>C</b><span>crouch (silent, harder to see)</span><b>F</b><span>flashlight</span>
+      <b>E</b><span>take / read / hide in a locker</span>
+      <b>Q</b><span>ring a spirit bell: freezes her</span>
+    </div>
+    <div class="warn">HEADPHONES ON · LIGHTS OFF · VOLUME UP</div>
+  </div>
+</div>
+
+<div id="lobby" class="screen">
+  <div class="title" style="font-size:48px">HOLLOWMERE</div>
+  <div class="panel">
+    <label>Survivors <span id="pcount"></span></label>
+    <ul class="plist" id="plist"></ul>
+    <label>Choose your survivor</label>
+    <div class="chars" id="chars"></div>
+    <div class="share" id="share">Loading invite link…</div>
+    <div class="row"><span>Mouse</span><input type="range" id="sens" min="0.4" max="3" step="0.05" value="1.2" /></div>
+    <div class="row"><span>Volume</span><input type="range" id="vol" min="0" max="1.2" step="0.05" value="0.9" /></div>
+    <button id="startBtn">Begin</button>
+    <div class="warn">Anyone can press Begin. Late joiners spawn in the foyer.</div>
+  </div>
+</div>
+
+<div id="loading" class="screen"><p>DESCENDING</p></div>
+
+<div id="hud">
+  <div id="effigies">EFFIGIES<div class="icons" id="icons"></div><div id="objective">Find the bone effigies. Stay quiet.</div><div id="clues"></div></div>
+  <div id="team"></div>
+  <div id="bars">
+    FLASHLIGHT<div class="bar" id="battery"><i></i></div>
+    STAMINA<div class="bar" id="stamina"><i></i></div>
+    <div id="bellCount" style="color:#ffd27a;letter-spacing:.2em;font-size:12px;text-shadow:0 0 8px #a60"></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="prompt"></div>
+  <div id="messages"></div>
+  <div id="spectate"></div>
+  <div id="specHud" style="display:none;position:absolute;bottom:22px;right:26px;text-align:right;font-size:12px;line-height:1.7;color:#9fd8ff;text-shadow:0 0 6px #000"></div>
+</div>
+<div id="vent"></div>
+<div id="redflash"></div>
+<div id="note"><div class="paper"><div class="text" id="noteText"></div><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
+
+<div id="resume" class="screen"><div id="brief"></div><h2>CLICK TO RESUME</h2><p>It won't wait for you.</p></div>
+
+<div id="scare"></div>
+<div id="faceflash"></div>
+<div id="death" class="screen"><h1>IT TOOK YOU</h1><p>you will watch the others</p></div>
+<div id="end" class="screen"><h1 id="endTitle"></h1><ul id="endList"></ul><div class="small">returning to the lobby…</div></div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
