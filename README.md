@@ -84,7 +84,7 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 - **The Crawler:** wakes after the first ritual item is taken. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
 - **Lockers and wardrobes:** if she *sees you get in*, she drags you out. Break line of sight first.
 - **Aatma candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
-- Teammates glow through walls in their player color, so you never lose each other.
+- Teammates' names float above them and show through walls, so you never lose each other.
 - Dead players watch the survivors (click to switch) until someone revives them.
 - Inside a locker your eyes adjust to the dark: you can watch through the vents. If she saw you get in she will stop and listen at the door, and she doesn't always open it.
 

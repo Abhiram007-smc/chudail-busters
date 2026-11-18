@@ -550,7 +550,7 @@ export function createAvatar(name, color, charKey) {
   const key = charKey || DEFAULT_CHARS[0];
   const glb = ANIMATED[key] ? animatedAvatar(body, arm, armM, ANIMATED[key]) : MODELS.survivor ? upgradeAvatar(body, arm, armM, col) : null;
 
-  const xray = addXray(body, col);
+  const xray = []; // no glow through walls for teammates (owner's call); names still show through walls
   root.userData = {
     shown: true, xray,
     setShown(v) { if (this.shown === v) return; this.shown = v; this.body.traverse((o) => { if (o.isMesh || o.isSprite) o.visible = v; }); if (!v) this.beam.visible = false; },
