@@ -144,7 +144,14 @@ Quick verification snippet (passes):
 node -e "import('./shared/map.js').then(m=>{const x=m.generateMap(5);console.log(x.stairs.length, x.talismans.map(t=>t.kind+'@'+t.L));const s=x.stairs[0];const[dx,dz]=s.d;const bx=(s.c2[0]+.5)*3+dx*1.5,bz=(s.c2[1]+.5)*3+dz*1.5;console.log(m.stairTransition(x,s.L,bx-dx*.35,bz-dz*.35))})"
 ```
 
-### 7.2 TODO, server.js (do this first)
+### 7.2 DONE, server.js (verified with a bot on Hard: monster crossed floors 1→0→-1, 5 items placed, lure → bound → escape → win)
+
+Implemented as specified below (`followPath`/`moveEntity` helpers handle multi-floor steering + `stairTransition`).
+Snapshot rows now end with `L` (players index 13, monster index 8, crawler index 5). New events: `drop`, `placed`,
+`bound`, `stage:'lure'|'escape'`. New messages: `{t:'place', slot}`, `{t:'difficulty', key}`. `start` includes
+`difficulty, placed, progress, moved` and per-player `items, L`.
+
+Original spec, kept for reference:
 
 1. Imports: replace `bfsPath` with `bfsPath3`, add `stairTransition, heightAt, DIFFICULTY, ITEM_KINDS`.
 2. Players get `L` (spawn `L=0`). `{t:'s'}` must carry `L`; store it. Add `L` to the snapshot row (append at the end

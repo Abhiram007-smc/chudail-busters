@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, generateMap, bfsPath, lineOfSight, resolveCircle, isWall, cellOf,
+  CELL, TALISMANS, DIFFICULTY, generateMap, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,9 +61,9 @@ const server = http.createServer((req, res) => {
 
 // ---------------- game state ----------------
 const game = {
-  phase: 'lobby', players: new Map(), map: null, seed: 0, monster: null,
-  talismans: [], batteries: [], collected: 0, exitOpen: false, startTime: 0,
-  nextScare: 0, endTimer: null, time: 0,
+  phase: 'lobby', players: new Map(), map: null, seed: 0, monster: null, difficulty: 'normal',
+  talismans: [], batteries: [], bells: [], souls: [], progress: 0, placed: [null, null, null, null, null],
+  exitOpen: false, startTime: 0, nextScare: 0, endTimer: null, time: 0, stage: 'items',
 };
 let nextId = 1;
 
@@ -73,9 +73,11 @@ const broadcast = (msg) => { const s = JSON.stringify(msg); for (const p of game
 const now = () => game.time;
 const rand = (a, b) => a + Math.random() * (b - a);
 const frontOf = (h) => (h.type === 'bed' ? 1.55 : 0.95); // where you stand in front of a hiding spot
+const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function lobbyMsg() {
-  return { t: 'lobby', phase: game.phase, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
+  return { t: 'lobby', phase: game.phase, difficulty: game.difficulty, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
 }
 
 function freeColor() {
@@ -85,39 +87,43 @@ function freeColor() {
 
 function startMsg() {
   return {
-    t: 'start', seed: game.seed,
-    players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char, x: p.x, z: p.z, alive: p.alive, escaped: p.escaped })),
+    t: 'start', seed: game.seed, difficulty: game.difficulty,
+    players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char, x: p.x, z: p.z, L: p.L, alive: p.alive, escaped: p.escaped, items: p.items })),
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
-    collected: game.collected, exitOpen: game.exitOpen, stage: game.stage,
+    moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
+    progress: game.progress, placed: game.placed, exitOpen: game.exitOpen, stage: game.stage,
   };
 }
 
 function startGame() {
   game.seed = (Math.random() * 2 ** 31) >>> 0;
   game.map = generateMap(game.seed);
-  const m = game.map;
+  const m = game.map, d = D();
   game.talismans = m.talismans.map((t) => ({ ...t, taken: false }));
-  game.batteries = m.batteries.map((b) => ({ ...b, taken: false }));
-  game.bells = m.bells.map((b) => ({ ...b, taken: false }));
-  game.souls = m.souls.map((b) => ({ ...b, taken: false }));
-  game.collected = 0; game.exitOpen = false; game.sniffed = {}; game.stage = 'effigies';
-  game.crawler = { x: 0, z: 0, yaw: 0, state: 'gone', t: now() + 20, target: null, path: null, pathT: -9, pi: 0 };
+  // fewer supplies on harder difficulties (removed items start "taken")
+  const thin = (list, mult) => list.map((b, i) => ({ ...b, taken: i >= Math.round(list.length * Math.min(1, mult)) }));
+  game.batteries = thin(m.batteries, d.items);
+  game.bells = thin(m.bells, d.items);
+  game.souls = thin(m.souls, d.revive);
+  game.progress = 0; game.placed = [null, null, null, null, null];
+  game.exitOpen = false; game.sniffed = {}; game.stage = 'items';
+  game.crawler = { x: 0, z: 0, L: 0, yaw: 0, state: 'gone', t: now() + 20, target: null, path: null, pathT: -9, pi: 0 };
   game.startTime = now(); game.nextScare = now() + 45 + Math.random() * 25;
   let n = 0;
   for (const p of game.players.values()) spawnPlayer(p, n++);
   game.monster = {
-    x: m.monsterSpawn.x, z: m.monsterSpawn.z, yaw: 0, state: 'dormant', target: null,
+    x: m.monsterSpawn.x, z: m.monsterSpawn.z, L: m.monsterSpawn.L, yaw: 0, state: 'dormant', target: null,
     goal: null, path: null, pi: 0, pathT: -9, goalKey: -1, stall: 0, lostT: 0, huntT: 0, feedT: 0,
     lastSeen: null, farT: 0, stuckT: 0, lit: false, lunge: false, speed: 0,
   };
   game.phase = 'playing';
   broadcast(startMsg());
-  console.log(`[game] started with ${game.players.size} player(s), seed ${game.seed}`);
+  console.log(`[game] started with ${game.players.size} player(s), seed ${game.seed}, ${game.difficulty}`);
 }
 
 function spawnPlayer(p, n) {
   const s = game.map.spawns[n % game.map.spawns.length];
-  Object.assign(p, { x: s[0], z: s[1], yaw: Math.PI / 2, pitch: 0, fl: true, cr: false, sp: false, sn: false, mv: false, alive: true, escaped: false, hid: null, bells: 0, revives: 0 });
+  Object.assign(p, { x: s[0], z: s[1], L: 0, yaw: Math.PI / 2, pitch: 0, fl: true, cr: false, sp: false, sn: false, mv: false, alive: true, escaped: false, hid: null, bells: 0, revives: 0, items: [] });
 }
 
 function activePlayers() { return [...game.players.values()].filter((p) => p.alive && !p.escaped); }
@@ -135,100 +141,163 @@ function endGame() {
 
 function checkEnd() { if (game.phase === 'playing' && activePlayers().length === 0) endGame(); }
 
-// ---------------- monster AI ----------------
-function randomFloorNear(cx, cz, minC, maxC) {
+// ---------------- helpers ----------------
+function randomFloorNear(L, cx, cz, minC, maxC) {
   const map = game.map;
   for (let t = 0; t < 60; t++) {
     const i = cellOf(cx) + Math.round((Math.random() * 2 - 1) * maxC);
     const j = cellOf(cz) + Math.round((Math.random() * 2 - 1) * maxC);
-    if (isWall(map, i, j)) continue;
+    if (isWall(map, L, i, j)) continue;
     const d = Math.max(Math.abs(i - cellOf(cx)), Math.abs(j - cellOf(cz)));
     if (d < minC) continue;
-    return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL };
+    return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, L };
   }
   return null;
 }
-
 function setGoal(m, g) { m.goal = g; m.pathT = -9; }
-
-function killPlayer(p, dragged = false) {
+function clearPath(L, x0, z0, x1, z1) {
+  const map = game.map;
+  const dx = x1 - x0, dz = z1 - z0, d = Math.hypot(dx, dz) || 1;
+  const px = (-dz / d) * 0.3, pz = (dx / d) * 0.3;
+  return lineOfSight(map, L, x0 + px, z0 + pz, x1 + px, z1 + pz) && lineOfSight(map, L, x0 - px, z0 - pz, x1 - px, z1 - pz);
+}
+// carried ritual items fall where you die so someone else can bring them to the star
+function dropItems(p) {
+  for (const id of p.items || []) {
+    const it = game.talismans.find((q) => q.id === id);
+    if (!it) continue;
+    it.taken = false; it.moved = true; it.x = p.x + rand(-0.4, 0.4); it.z = p.z + rand(-0.4, 0.4); it.L = p.L;
+    broadcast({ t: 'ev', e: 'drop', id, x: it.x, z: it.z, L: it.L, by: p.id });
+  }
+  p.items = [];
+}
+function killPlayer(p, dragged = false, by = null) {
   const m = game.monster;
   p.alive = false;
   if (p.hid) { const h = game.map.hides.find((q) => q.id === p.hid); p.x = h.x + h.fx * frontOf(h); p.z = h.z + h.fz * frontOf(h); p.hid = null; }
-  broadcast({ t: 'ev', e: 'kill', id: p.id, x: p.x, z: p.z, mx: m.x, mz: m.z, dragged });
-  m.state = 'feed'; m.feedT = 5; m.target = null;
+  dropItems(p);
+  const src = by || m;
+  broadcast({ t: 'ev', e: 'kill', id: p.id, x: p.x, z: p.z, L: p.L, mx: src.x, mz: src.z, dragged, crawler: !!by });
+  if (!by) { m.state = 'feed'; m.feedT = 5; m.target = null; }
   checkEnd();
 }
 
+// steer an entity (monster/crawler) along a multi-floor path towards goal {x,z,L}
+function followPath(e, goal, t) {
+  const map = game.map, N = map.W * map.H;
+  const gL = goal.L ?? e.L, gi = cellOf(goal.x), gj = cellOf(goal.z);
+  const key = (gL + 1) * N + gj * map.W + gi;
+  if (t - e.pathT > 0.5 || key !== e.goalKey || !e.path) {
+    e.path = bfsPath3(map, e.L, cellOf(e.x), cellOf(e.z), gL, gi, gj) || [];
+    e.pi = 0; e.pathT = t; e.goalKey = key;
+  }
+  // skip ahead to the farthest waypoint on this floor with a clear line
+  for (let k = Math.min(e.path.length - 1, e.pi + 4); k > e.pi; k--) {
+    let same = true; for (let q = e.pi; q <= k; q++) if (e.path[q][0] !== e.L) { same = false; break; }
+    if (!same) continue;
+    const [, wi, wj] = e.path[k];
+    if (clearPath(e.L, e.x, e.z, (wi + 0.5) * CELL, (wj + 0.5) * CELL)) { e.pi = k; break; }
+  }
+  if (e.pi < e.path.length) {
+    const [wl, wi, wj] = e.path[e.pi];
+    const tx = (wi + 0.5) * CELL, tz = (wj + 0.5) * CELL;
+    if (wl === e.L && Math.hypot(tx - e.x, tz - e.z) < 0.35) e.pi++;
+    return [tx, tz];
+  }
+  return gL === e.L ? [goal.x, goal.z] : null;
+}
+// move with collision, then take the stairs if pressed against the top/bottom
+function moveEntity(e, tx, tz, speed, dt, radius) {
+  const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz);
+  if (d < 0.05) return 0;
+  const step = Math.min(d, speed * dt);
+  const ox = e.x, oz = e.z;
+  [e.x, e.z] = resolveCircle(game.map, e.L, e.x + (dx / d) * step, e.z + (dz / d) * step, radius);
+  const tr = stairTransition(game.map, e.L, e.x, e.z);
+  if (tr) { [e.L, e.x, e.z] = tr; e.path = null; }
+  const want = Math.atan2(-dx, -dz);
+  let diff = want - e.yaw;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  e.yaw += diff * Math.min(1, dt * 8);
+  return Math.hypot(e.x - ox, e.z - oz) / step;
+}
+
+// ---------------- monster AI ----------------
 function updateMonster(dt) {
   const m = game.monster, map = game.map;
   if (!m) return;
-  const t = now();
+  const t = now(), d = D();
   const targets = activePlayers();
+  if (m.state === 'bound') { m.speed = 0; m.lit = false; return; }
   if (t < game.startTime + 18) { m.state = 'dormant'; m.speed = 0; return; }
   if (!targets.length) return;
   if (m.state === 'dormant') { m.state = 'wander'; m.goal = null; }
 
-  const bonus = game.collected * 0.3 + (game.stage === 'escape' ? 0.7 : 0);
+  // the trap: once the star is complete, she is bound if she steps into the centre
+  if (game.stage === 'lure' && m.L === map.shrine.L && Math.hypot(m.x - map.shrine.x, m.z - map.shrine.z) < map.shrine.center) {
+    m.state = 'bound'; m.speed = 0; game.stage = 'escape'; game.exitOpen = true;
+    if (game.crawler) game.crawler.state = 'gone';
+    broadcast({ t: 'ev', e: 'bound', x: m.x, z: m.z });
+    broadcast({ t: 'ev', e: 'stage', stage: 'escape' });
+    console.log('[game] she is bound');
+    return;
+  }
+
+  const bonus = game.progress * 0.25 + (game.stage === 'lure' ? 0.5 : 0);
 
   if (m.stunT > 0) {
     m.stunT -= dt; m.state = 'stunned'; m.speed = 0; m.lit = false;
     if (m.stunT <= 0) { m.state = 'wander'; m.goal = null; m.huntLocker = null; }
     return;
   }
-
   if (m.state === 'feed') {
     m.feedT -= dt; m.speed = 0;
     if (m.feedT <= 0) { m.state = 'wander'; m.goal = null; }
     return;
   }
 
-  // --- perception
+  // --- perception (same floor only)
   const fwdX = -Math.sin(m.yaw), fwdZ = -Math.cos(m.yaw);
   let seen = null, seenD = 1e9, lit = false, litBy = null, minD = 1e9;
   for (const p of targets) {
-    const dx = p.x - m.x, dz = p.z - m.z, d = Math.hypot(dx, dz);
-    minD = Math.min(minD, d);
-    if (d > 20 || p.hid) continue;
-    const los = lineOfSight(map, m.x, m.z, p.x, p.z);
-    if (!los) continue;
-    // flashlight on the monster
-    if (p.fl && d < 11) {
+    if (p.L !== m.L) continue;
+    const dx = p.x - m.x, dz = p.z - m.z, dist = Math.hypot(dx, dz);
+    minD = Math.min(minD, dist);
+    if (dist > 20 * d.sight || p.hid) continue;
+    if (!lineOfSight(map, m.L, m.x, m.z, p.x, p.z)) continue;
+    if (p.fl && dist < 11) {
       const lx = -Math.sin(p.yaw), lz = -Math.cos(p.yaw);
-      const dot = (-dx * lx + -dz * lz) / (d || 1);
+      const dot = (-dx * lx + -dz * lz) / (dist || 1);
       if (dot > 0.95 && Math.abs(p.pitch) < 0.7) { lit = true; litBy = p; }
     }
-    // crouching in the dark makes you nearly invisible; she must almost step on you
-    const range = p.cr ? (p.fl ? 8 : 2.2) : p.fl ? 15 : 7;
+    const range = (p.cr ? (p.fl ? 8 : 2.2) : p.fl ? 15 : 7) * d.sight;
     const near = p.cr && !p.fl ? 1.1 : 2.4;
-    const facing = (dx * fwdX + dz * fwdZ) / (d || 1);
-    const visible = d < near || (d < range && (facing > (p.cr ? 0.5 : 0.25) || (!p.cr && d < 5)));
-    if (visible && d < seenD) { seen = p; seenD = d; }
+    const facing = (dx * fwdX + dz * fwdZ) / (dist || 1);
+    const visible = dist < near || (dist < range && (facing > (p.cr ? 0.5 : 0.25) || (!p.cr && dist < 5)));
+    if (visible && dist < seenD) { seen = p; seenD = dist; }
   }
   if (!seen && lit) { seen = litBy; seenD = Math.hypot(litBy.x - m.x, litBy.z - m.z); }
   m.lit = lit;
 
-  // --- hearing
+  // --- hearing (same floor)
   let noise = null;
   for (const p of targets) {
-    if (!p.mv || p.hid) continue;
-    const d = Math.hypot(p.x - m.x, p.z - m.z);
-    const r = p.sp ? 17 : (p.cr || p.sn) ? 0 : 6;
-    if (d < r) { noise = { x: p.x, z: p.z }; break; }
+    if (!p.mv || p.hid || p.L !== m.L) continue;
+    const dist = Math.hypot(p.x - m.x, p.z - m.z);
+    const r = (p.sp ? 17 : (p.cr || p.sn) ? 0 : 6) * d.hearing;
+    if (dist < r) { noise = { x: p.x, z: p.z, L: p.L }; break; }
   }
 
   // --- state machine
   if (seen) {
-    if (m.state !== 'chase') {
-      m.stall = 0.85;
-      broadcast({ t: 'ev', e: 'chase', id: seen.id });
-    }
+    if (m.state !== 'chase') { m.stall = 0.85; broadcast({ t: 'ev', e: 'chase', id: seen.id }); }
     m.state = 'chase'; m.target = seen.id; m.lostT = 0; m.huntLocker = null;
-    m.lastSeen = { x: seen.x, z: seen.z };
+    m.lastSeen = { x: seen.x, z: seen.z, L: seen.L };
   } else if (m.state === 'chase') {
     m.lostT += dt;
     const tp = game.players.get(m.target);
-    if (tp && tp.alive && !tp.escaped && m.lostT < 2.2) m.lastSeen = { x: tp.x, z: tp.z }; // it can smell you briefly
+    if (tp && tp.alive && !tp.escaped && m.lostT < 2.2) m.lastSeen = { x: tp.x, z: tp.z, L: tp.L }; // she can smell you briefly
     if (m.lostT > 6) { m.state = 'hunt'; m.huntT = 0; setGoal(m, m.lastSeen); }
   } else if (noise) {
     if (m.state !== 'hunt' || !m.goal || Math.hypot(m.goal.x - noise.x, m.goal.z - noise.z) > 3) setGoal(m, noise);
@@ -236,18 +305,16 @@ function updateMonster(dt) {
   }
 
   if (m.state === 'hunt' && m.huntLocker) {
-    const L = m.huntLocker, tp = game.players.get(L.pid);
-    if (Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1.3) {
-      // she stops at the door and listens first: hold your breath, 40% of the time she gives up
-      m.huntLocker = null; m.state = 'sniff'; m.sniffT = 3; m.sniffYaw = L.yaw;
-      m.sniffKill = tp && tp.alive && tp.hid === L.hid && Math.random() < 0.6 ? { pid: tp.id, hid: L.hid } : null;
-      broadcast({ t: 'ev', e: 'sniff', hid: L.hid });
+    const hl = m.huntLocker, tp = game.players.get(hl.pid);
+    if (m.L === m.goal.L && Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1.3) {
+      m.huntLocker = null; m.state = 'sniff'; m.sniffT = 3; m.sniffYaw = hl.yaw;
+      m.sniffKill = tp && tp.alive && tp.hid === hl.hid && Math.random() < 0.6 ? { pid: tp.id, hid: hl.hid } : null;
+      broadcast({ t: 'ev', e: 'sniff', hid: hl.hid });
     }
   } else if (m.state === 'hunt') {
     m.huntT += dt;
-    if (m.huntT > 16 || (m.goal && Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1)) {
-      // search nearby before giving up
-      if (m.huntT < 16 && Math.random() < 0.6) setGoal(m, randomFloorNear(m.x, m.z, 2, 4) || m.goal);
+    if (m.huntT > 16 || (m.goal && m.goal.L === m.L && Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1)) {
+      if (m.huntT < 16 && Math.random() < 0.6) setGoal(m, randomFloorNear(m.L, m.x, m.z, 2, 4) || m.goal);
       else { m.state = 'wander'; m.goal = null; }
     }
   }
@@ -258,14 +325,13 @@ function updateMonster(dt) {
       const k = m.sniffKill; m.sniffKill = null;
       const tp = k && game.players.get(k.pid);
       if (tp && tp.alive && tp.hid === k.hid) { killPlayer(tp, true); return; }
-      m.state = 'wander'; m.goal = randomFloorNear(m.x, m.z, 3, 8); m.pathT = -9;
+      m.state = 'wander'; m.goal = randomFloorNear(m.L, m.x, m.z, 3, 8); m.pathT = -9;
     }
     return;
   }
-  // sniff at occupied lockers it walks past
   if (m.state === 'wander' || m.state === 'hunt') {
     for (const p of targets) {
-      if (!p.hid) continue;
+      if (!p.hid || p.L !== m.L) continue;
       const h = map.hides.find((q) => q.id === p.hid);
       const fx = h.x + h.fx * frontOf(h), fz = h.z + h.fz * frontOf(h);
       if (Math.hypot(fx - m.x, fz - m.z) < 1.6 && (game.sniffed[h.id] || 0) < t) {
@@ -275,111 +341,73 @@ function updateMonster(dt) {
     }
   }
   if (m.state === 'wander') {
-    if (!m.goal || Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1) {
+    if (!m.goal || (m.goal.L === m.L && Math.hypot(m.goal.x - m.x, m.goal.z - m.z) < 1)) {
       let g = null;
-      if (Math.random() < 0.55) {
-        const p = targets[Math.floor(Math.random() * targets.length)];
-        g = randomFloorNear(p.x, p.z, 2, 7);
-      }
-      setGoal(m, g || randomFloorNear(m.x, m.z, 3, 12));
+      const sh = map.shrine;
+      if (game.stage === 'lure' && Math.random() < 0.6) g = randomFloorNear(sh.L, sh.x, sh.z, 1, 4); // drawn to the star
+      else if (Math.random() < 0.55) { const p = pickRand(targets); g = randomFloorNear(p.L, p.x, p.z, 2, 7); }
+      setGoal(m, g || randomFloorNear(m.L, m.x, m.z, 3, 12));
     }
-    // keep pressure: teleport closer if it's been far from everyone for a while
+    // keep pressure: if nobody is near her (or on her floor) for a while, appear closer to someone
     if (minD > 30) m.farT += dt; else m.farT = 0;
-    if (m.farT > 22) {
-      const p = targets[Math.floor(Math.random() * targets.length)];
+    if (m.farT > 25) {
+      const p = pickRand(targets);
       for (let k = 0; k < 30; k++) {
-        const s = randomFloorNear(p.x, p.z, 5, 8);
-        if (s && !targets.some((q) => lineOfSight(map, s.x, s.z, q.x, q.z) && Math.hypot(q.x - s.x, q.z - s.z) < 25)) {
-          m.x = s.x; m.z = s.z; m.farT = 0; m.goal = null; break;
+        const s = randomFloorNear(p.L, p.x, p.z, 5, 8);
+        if (s && !targets.some((q) => q.L === s.L && lineOfSight(map, s.L, s.x, s.z, q.x, q.z) && Math.hypot(q.x - s.x, q.z - s.z) < 25)) {
+          m.x = s.x; m.z = s.z; m.L = s.L; m.farT = 0; m.goal = null; m.path = null; break;
         }
       }
     }
   }
 
   // --- speed
-  let speed = m.state === 'chase' ? 3.55 : m.state === 'hunt' ? 2.6 : 1.5;
-  speed += bonus;
+  let speed = (m.state === 'chase' ? 3.55 : m.state === 'hunt' ? 2.6 : 1.5) + bonus;
+  speed *= d.speed;
   m.lunge = false;
   if (m.state === 'chase' && seen && seenD < 3) { speed *= 1.3; m.lunge = true; }
   if (lit) speed *= 0.45;
   if (m.stall > 0) { m.stall -= dt; speed = 0; }
   m.speed = speed;
 
-  // --- steering target
-  let tx = null, tz = null;
+  // --- steering
+  let target = null;
   const chaseT = m.state === 'chase' ? game.players.get(m.target) : null;
-  if (chaseT && seen === chaseT && clearPath(m.x, m.z, chaseT.x, chaseT.z)) {
-    tx = chaseT.x; tz = chaseT.z;
-  } else {
+  if (chaseT && seen === chaseT && clearPath(m.L, m.x, m.z, chaseT.x, chaseT.z)) target = [chaseT.x, chaseT.z];
+  else {
     const goal = m.state === 'chase' ? m.lastSeen : m.goal;
-    if (goal) {
-      const gi = cellOf(goal.x), gj = cellOf(goal.z);
-      const key = gj * map.W + gi;
-      if (t - m.pathT > 0.5 || key !== m.goalKey || !m.path) {
-        m.path = bfsPath(map, cellOf(m.x), cellOf(m.z), gi, gj) || [];
-        m.pi = 0; m.pathT = t; m.goalKey = key;
-      }
-      // skip ahead to farthest waypoint with a clear line
-      for (let k = Math.min(m.path.length - 1, m.pi + 4); k > m.pi; k--) {
-        const [wi, wj] = m.path[k];
-        if (clearPath(m.x, m.z, (wi + 0.5) * CELL, (wj + 0.5) * CELL)) { m.pi = k; break; }
-      }
-      if (m.pi < m.path.length) {
-        const [wi, wj] = m.path[m.pi];
-        tx = (wi + 0.5) * CELL; tz = (wj + 0.5) * CELL;
-        if (Math.hypot(tx - m.x, tz - m.z) < 0.35) m.pi++;
-      } else { tx = goal.x; tz = goal.z; }
-    }
+    if (goal) target = followPath(m, goal, t);
+  }
+  if (target && speed > 0) {
+    const r = moveEntity(m, target[0], target[1], speed, dt, 0.35);
+    if (r < 0.2) { m.stuckT += dt; if (m.stuckT > 1) { m.path = null; m.stuckT = 0; if (m.state === 'wander') m.goal = null; } }
+    else m.stuckT = 0;
   }
 
-  if (tx !== null && speed > 0) {
-    const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz);
-    if (d > 0.05) {
-      const step = Math.min(d, speed * dt);
-      const ox = m.x, oz = m.z;
-      [m.x, m.z] = resolveCircle(map, m.x + (dx / d) * step, m.z + (dz / d) * step, 0.35);
-      const want = Math.atan2(-dx, -dz);
-      let diff = want - m.yaw;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      m.yaw += diff * Math.min(1, dt * 8);
-      const moved = Math.hypot(m.x - ox, m.z - oz);
-      if (moved < step * 0.2) { m.stuckT += dt; if (m.stuckT > 1) { m.path = null; m.stuckT = 0; if (m.state === 'wander') m.goal = null; } }
-      else m.stuckT = 0;
-    }
-  }
-
-  // --- kill
+  // --- kill (only while chasing, same floor)
   for (const p of targets) {
-    if (!p.hid && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
+    if (!p.hid && p.L === m.L && m.state === 'chase' && Math.hypot(p.x - m.x, p.z - m.z) < 1.05 && m.stall <= 0) { killPlayer(p); break; }
   }
-}
-
-function clearPath(x0, z0, x1, z1) {
-  const map = game.map;
-  const dx = x1 - x0, dz = z1 - z0, d = Math.hypot(dx, dz) || 1;
-  const px = (-dz / d) * 0.3, pz = (dx / d) * 0.3;
-  return lineOfSight(map, x0 + px, z0 + pz, x1 + px, z1 + pz) && lineOfSight(map, x0 - px, z0 - pz, x1 - px, z1 - pz);
 }
 
 // ---------------- the crawler (drops from the ceiling) ----------------
 function updateCrawler(dt) {
-  const c = game.crawler, map = game.map, t = now();
+  const c = game.crawler, t = now();
   if (!c) return;
+  if (!D().crawler || game.progress < 1 || game.stage === 'escape') { c.state = 'gone'; return; }
   const targets = activePlayers().filter((p) => !p.hid);
-  if (game.collected < 1) { c.state = 'gone'; return; }
   if (c.state === 'gone') {
     if (t < c.t || !targets.length) return;
-    const p = targets[Math.floor(Math.random() * targets.length)];
-    const s = randomFloorNear(p.x, p.z, 3, 7);
-    if (s && !targets.some((q) => Math.hypot(q.x - s.x, q.z - s.z) < 7)) { c.x = s.x; c.z = s.z; c.state = 'ceiling'; c.t = t + 70; c.yaw = Math.random() * 6.28; }
+    const p = pickRand(targets);
+    const s = randomFloorNear(p.L, p.x, p.z, 3, 7);
+    if (s && !targets.some((q) => q.L === s.L && Math.hypot(q.x - s.x, q.z - s.z) < 7)) { c.x = s.x; c.z = s.z; c.L = s.L; c.state = 'ceiling'; c.t = t + 70; c.yaw = Math.random() * 6.28; }
     return;
   }
   if (c.state === 'ceiling') {
     for (const p of targets) {
-      if (Math.hypot(p.x - c.x, p.z - c.z) < 2.4) {
+      if (p.L === c.L && Math.hypot(p.x - c.x, p.z - c.z) < 2.4) {
         c.state = 'drop'; c.t = t + 1.4; c.target = p.id; c.yaw = Math.atan2(-(p.x - c.x), -(p.z - c.z));
-        broadcast({ t: 'ev', e: 'crawlerDrop', id: p.id, x: c.x, z: c.z });
+        broadcast({ t: 'ev', e: 'crawlerDrop', id: p.id, x: c.x, z: c.z, L: c.L });
         return;
       }
     }
@@ -388,29 +416,14 @@ function updateCrawler(dt) {
   }
   if (c.state === 'drop') { if (t > c.t) { c.state = 'crawl'; c.t = t + 9; c.path = null; } return; }
   if (c.state === 'retreat') { if (t > c.t) { c.state = 'gone'; c.t = t + rand(25, 40); } return; }
-  // crawl: hunt the one who woke it
   const p = game.players.get(c.target);
   if (!p || !p.alive || p.escaped || p.hid || t > c.t) { c.state = 'retreat'; c.t = t + 1.2; return; }
-  const speed = 3.3 + game.collected * 0.2 + (game.stage === 'escape' ? 0.5 : 0);
-  let tx = p.x, tz = p.z;
-  if (!clearPath(c.x, c.z, p.x, p.z)) {
-    if (!c.path || t - c.pathT > 0.4) { c.path = bfsPath(map, cellOf(c.x), cellOf(c.z), cellOf(p.x), cellOf(p.z)) || []; c.pi = 0; c.pathT = t; }
-    if (c.pi < c.path.length) {
-      const [wi, wj] = c.path[c.pi]; tx = (wi + 0.5) * CELL; tz = (wj + 0.5) * CELL;
-      if (Math.hypot(tx - c.x, tz - c.z) < 0.35) c.pi++;
-    }
-  }
-  const dx = tx - c.x, dz = tz - c.z, d = Math.hypot(dx, dz);
-  if (d > 0.05) {
-    const step = Math.min(d, speed * dt);
-    [c.x, c.z] = resolveCircle(map, c.x + (dx / d) * step, c.z + (dz / d) * step, 0.3);
-    c.yaw = Math.atan2(-dx, -dz);
-  }
-  if (Math.hypot(p.x - c.x, p.z - c.z) < 0.9) {
-    p.alive = false;
-    broadcast({ t: 'ev', e: 'kill', id: p.id, x: p.x, z: p.z, mx: c.x, mz: c.z, crawler: true });
+  const speed = (3.3 + game.progress * 0.2) * D().speed;
+  const target = p.L === c.L && clearPath(c.L, c.x, c.z, p.x, p.z) ? [p.x, p.z] : followPath(c, { x: p.x, z: p.z, L: p.L }, t);
+  if (target) moveEntity(c, target[0], target[1], speed, dt, 0.3);
+  if (p.L === c.L && Math.hypot(p.x - c.x, p.z - c.z) < 0.9) {
+    killPlayer(p, false, c);
     c.state = 'retreat'; c.t = t + 2;
-    checkEnd();
   }
 }
 
@@ -419,12 +432,11 @@ function updateScares() {
   if (now() < game.nextScare) return;
   const targets = activePlayers();
   if (!targets.length) return;
-  game.nextScare = now() + 40 - game.collected * 4 + Math.random() * 35;
-  const types = ['lights', 'bang', 'scream', 'whisper', 'lights', 'bang'];
-  const type = types[Math.floor(Math.random() * types.length)];
-  const p = targets[Math.floor(Math.random() * targets.length)];
-  const pos = randomFloorNear(p.x, p.z, 2, 5) || { x: p.x, z: p.z };
-  broadcast({ t: 'ev', e: 'scare', type, x: pos.x, z: pos.z });
+  game.nextScare = now() + 40 - game.progress * 4 + Math.random() * 35;
+  const type = pickRand(['lights', 'bang', 'scream', 'whisper', 'lights', 'bang']);
+  const p = pickRand(targets);
+  const pos = randomFloorNear(p.L, p.x, p.z, 2, 5) || { x: p.x, z: p.z, L: p.L };
+  broadcast({ t: 'ev', e: 'scare', type, x: pos.x, z: pos.z, L: pos.L });
 }
 
 // ---------------- loop ----------------
@@ -437,12 +449,12 @@ setInterval(() => {
   updateMonster(dt);
   updateCrawler(dt);
   updateScares();
-  const m = game.monster;
+  const m = game.monster, c = game.crawler;
   broadcast({
     t: 'snap',
-    p: [...game.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +p.pitch.toFixed(3), p.fl ? 1 : 0, p.cr ? 1 : 0, p.alive ? 1 : 0, p.escaped ? 1 : 0, p.mv ? 1 : 0, p.sp ? 1 : 0, p.hid || 0, p.sn ? 1 : 0]),
-    m: m ? [+m.x.toFixed(2), +m.z.toFixed(2), +m.yaw.toFixed(3), m.state, m.target || 0, +m.speed.toFixed(2), m.lit ? 1 : 0, m.lunge ? 1 : 0] : null,
-    c: game.crawler && game.crawler.state !== 'gone' ? [+game.crawler.x.toFixed(2), +game.crawler.z.toFixed(2), +game.crawler.yaw.toFixed(3), game.crawler.state, game.crawler.target || 0] : null,
+    p: [...game.players.values()].map((p) => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +p.pitch.toFixed(3), p.fl ? 1 : 0, p.cr ? 1 : 0, p.alive ? 1 : 0, p.escaped ? 1 : 0, p.mv ? 1 : 0, p.sp ? 1 : 0, p.hid || 0, p.sn ? 1 : 0, p.L]),
+    m: m ? [+m.x.toFixed(2), +m.z.toFixed(2), +m.yaw.toFixed(3), m.state, m.target || 0, +m.speed.toFixed(2), m.lit ? 1 : 0, m.lunge ? 1 : 0, m.L] : null,
+    c: c && c.state !== 'gone' ? [+c.x.toFixed(2), +c.z.toFixed(2), +c.yaw.toFixed(3), c.state, c.target || 0, c.L] : null,
   });
 }, TICK * 1000);
 
@@ -467,7 +479,7 @@ wss.on('connection', (ws) => {
       const name = String(msg.name || 'Survivor').replace(/[<>]/g, '').slice(0, 14) || 'Survivor';
       const used = new Set([...game.players.values()].map((q) => q.char));
       const char = CHARS.includes(msg.char) ? msg.char : CHARS.find((c) => !used.has(c));
-      me = { id: nextId++, ws, name, char, color: freeColor(), x: 0, z: 0, yaw: 0, pitch: 0, fl: true, cr: false, sp: false, sn: false, mv: false, alive: true, escaped: false, hid: null };
+      me = { id: nextId++, ws, name, char, color: freeColor(), x: 0, z: 0, L: 0, yaw: 0, pitch: 0, fl: true, cr: false, sp: false, sn: false, mv: false, alive: true, escaped: false, hid: null, items: [] };
       game.players.set(me.id, me);
       send(me, { t: 'welcome', id: me.id, color: me.color });
       console.log(`[join] ${name} (${game.players.size}/${MAX_PLAYERS})`);
@@ -482,24 +494,26 @@ wss.on('connection', (ws) => {
     if (!me) return;
     if (msg.t === 'start' && game.phase === 'lobby') { startGame(); return; }
     if (msg.t === 'char' && CHARS.includes(msg.char)) { me.char = msg.char; broadcast(lobbyMsg()); return; }
+    if (msg.t === 'difficulty' && game.phase === 'lobby' && DIFFICULTY[msg.key]) { game.difficulty = msg.key; broadcast(lobbyMsg()); return; }
     if (game.phase !== 'playing') return;
+    const sameL = (o) => (o.L ?? 0) === me.L;
     if (msg.t === 's') {
       if (!me.alive || me.escaped) return;
       me.yaw = +msg.yaw || 0; me.pitch = +msg.pitch || 0;
       if (me.hid) { me.fl = false; me.mv = false; me.sp = false; return; }
       me.x = +msg.x || me.x; me.z = +msg.z || me.z;
+      if ([-1, 0, 1].includes(msg.L)) me.L = msg.L;
       me.fl = !!msg.fl; me.cr = !!msg.cr; me.sp = !!msg.sp; me.sn = !!msg.sn; me.mv = !!msg.mv;
     } else if (msg.t === 'hide') {
       if (!me.alive || me.escaped || me.hid) return;
       const h = game.map.hides.find((q) => q.id === msg.id);
-      if (!h || Math.hypot(h.x - me.x, h.z - me.z) > (h.type === 'bed' ? 3.2 : 2.6)) return;
+      if (!h || !sameL(h) || Math.hypot(h.x - me.x, h.z - me.z) > (h.type === 'bed' ? 3.2 : 2.6)) return;
       if ([...game.players.values()].some((q) => q.hid === h.id)) { send(me, { t: 'ev', e: 'hideFull', id: h.id }); return; }
       me.hid = h.id; me.x = h.x; me.z = h.z; me.mv = false; me.fl = false;
       const m = game.monster;
-      // she only knows if she watched you climb in from close by
-      if (m && m.state === 'chase' && m.target === me.id && m.lostT < 0.4 && Math.hypot(m.x - me.x, m.z - me.z) < 6 && lineOfSight(game.map, m.x, m.z, me.x, me.z)) {
+      if (m && m.state === 'chase' && m.target === me.id && m.L === me.L && m.lostT < 0.4 && Math.hypot(m.x - me.x, m.z - me.z) < 6 && lineOfSight(game.map, m.L, m.x, m.z, me.x, me.z)) {
         m.state = 'hunt'; m.huntT = 0; m.huntLocker = { hid: h.id, pid: me.id, yaw: Math.atan2(h.fx, h.fz) };
-        setGoal(m, { x: h.x + h.fx * frontOf(h), z: h.z + h.fz * frontOf(h) });
+        setGoal(m, { x: h.x + h.fx * frontOf(h), z: h.z + h.fz * frontOf(h), L: h.L });
       }
       broadcast({ t: 'ev', e: 'hide', id: me.id, hid: h.id });
     } else if (msg.t === 'note') {
@@ -512,46 +526,49 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'pickup') {
       if (!me.alive || me.escaped) return;
       const item = [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].find((i) => i.id === msg.id);
-      if (!item || item.taken || Math.hypot(item.x - me.x, item.z - me.z) > 3) return;
+      if (!item || item.taken || !sameL(item) || Math.hypot(item.x - me.x, item.z - me.z) > 3) return;
       item.taken = true;
-      const isT = item.id[0] === 't';
-      if (isT) {
-        game.collected++;
+      if (item.id[0] === 't') {
+        me.items.push(item.id);
+        if (!item.ever) { item.ever = true; game.progress++; }
         const m = game.monster;
-        if (m && m.state !== 'chase' && m.state !== 'dormant') { m.state = 'hunt'; m.huntT = 0; setGoal(m, { x: me.x, z: me.z }); }
-        if (game.collected >= TALISMANS && game.stage === 'effigies') { game.stage = 'heart'; setTimeout(() => broadcast({ t: 'ev', e: 'stage', stage: 'heart' }), 1500); }
+        if (m && !['chase', 'dormant', 'bound'].includes(m.state)) { m.state = 'hunt'; m.huntT = 0; setGoal(m, { x: me.x, z: me.z, L: me.L }); }
       }
       if (item.id[0] === 'w') me.bells = (me.bells || 0) + 1;
       if (item.id[0] === 'r') me.revives = (me.revives || 0) + 1;
-      broadcast({ t: 'ev', e: 'pickup', id: item.id, by: me.id, collected: game.collected, exitOpen: game.exitOpen, bells: me.bells, revives: me.revives });
+      broadcast({ t: 'ev', e: 'pickup', id: item.id, by: me.id, progress: game.progress, items: me.items, bells: me.bells, revives: me.revives });
+    } else if (msg.t === 'place') {
+      const sh = game.map.shrine, slot = msg.slot | 0;
+      if (!me.alive || me.escaped || me.L !== sh.L || !me.items.length || slot < 0 || slot > 4 || game.placed[slot]) return;
+      const pt = sh.points[slot];
+      if (Math.hypot(pt.x - me.x, pt.z - me.z) > 2.4) return;
+      const id = me.items.shift();
+      game.placed[slot] = id;
+      const count = game.placed.filter(Boolean).length;
+      broadcast({ t: 'ev', e: 'placed', slot, id, by: me.id, count, items: me.items });
+      if (count === TALISMANS && game.stage === 'items') {
+        game.stage = 'lure';
+        broadcast({ t: 'ev', e: 'stage', stage: 'lure' });
+        const m = game.monster;
+        if (m && m.state !== 'chase') { m.state = 'hunt'; m.huntT = 0; setGoal(m, { x: me.x, z: me.z, L: me.L }); }
+      }
     } else if (msg.t === 'revive') {
       const target = game.players.get(msg.id);
-      if (!me.alive || me.escaped || !(me.revives > 0) || !target || target.alive || target.escaped) return;
+      if (!me.alive || me.escaped || !(me.revives > 0) || !target || target.alive || target.escaped || target.L !== me.L) return;
       if (Math.hypot(target.x - me.x, target.z - me.z) > 3) return;
       me.revives--; target.alive = true; target.hid = null;
-      broadcast({ t: 'ev', e: 'revived', id: target.id, by: me.id, x: target.x, z: target.z, revives: me.revives });
+      broadcast({ t: 'ev', e: 'revived', id: target.id, by: me.id, x: target.x, z: target.z, L: target.L, revives: me.revives });
     } else if (msg.t === 'bell') {
       if (!me.alive || me.escaped || !(me.bells > 0)) return;
       me.bells--;
       const m = game.monster, c = game.crawler;
       let froze = false, scared = false;
-      if (m && m.state !== 'dormant' && Math.hypot(m.x - me.x, m.z - me.z) < 18) { m.stunT = 6; m.state = 'stunned'; froze = true; }
-      if (c && ['ceiling', 'drop', 'crawl'].includes(c.state) && Math.hypot(c.x - me.x, c.z - me.z) < 18) { c.state = 'retreat'; c.t = now() + 1.2; scared = true; }
-      broadcast({ t: 'ev', e: 'bell', by: me.id, x: me.x, z: me.z, bells: me.bells, froze, scared });
-    } else if (msg.t === 'burnStart') {
-      if (game.stage !== 'heart' || !me.alive || Math.hypot(game.map.heart.x - me.x, game.map.heart.z - me.z) > 3) return;
-      const m = game.monster;
-      if (m && m.state !== 'chase' && m.state !== 'stunned') { m.state = 'hunt'; m.huntT = 0; m.huntLocker = null; setGoal(m, { x: me.x, z: me.z }); }
-      broadcast({ t: 'ev', e: 'burnStart', by: me.id });
-    } else if (msg.t === 'burn') {
-      if (game.stage !== 'heart' || !me.alive || Math.hypot(game.map.heart.x - me.x, game.map.heart.z - me.z) > 3) return;
-      game.stage = 'escape'; game.exitOpen = true;
-      const m = game.monster; if (m) { m.stunT = 4; m.state = 'stunned'; }
-      if (game.crawler) { game.crawler.state = 'gone'; game.crawler.t = now() + 8; }
-      broadcast({ t: 'ev', e: 'stage', stage: 'escape', by: me.id });
+      if (m && !['dormant', 'bound'].includes(m.state) && m.L === me.L && Math.hypot(m.x - me.x, m.z - me.z) < 18) { m.stunT = 6; m.state = 'stunned'; froze = true; }
+      if (c && ['ceiling', 'drop', 'crawl'].includes(c.state) && c.L === me.L && Math.hypot(c.x - me.x, c.z - me.z) < 18) { c.state = 'retreat'; c.t = now() + 1.2; scared = true; }
+      broadcast({ t: 'ev', e: 'bell', by: me.id, x: me.x, z: me.z, L: me.L, bells: me.bells, froze, scared });
     } else if (msg.t === 'escape') {
       const ex = game.map.exit;
-      if (!game.exitOpen || !me.alive || me.escaped || Math.hypot(ex.x - me.x, ex.z - me.z) > 3) return;
+      if (!game.exitOpen || !me.alive || me.escaped || me.L !== ex.L || Math.hypot(ex.x - me.x, ex.z - me.z) > 3) return;
       me.escaped = true;
       broadcast({ t: 'ev', e: 'escaped', id: me.id });
       checkEnd();
@@ -560,6 +577,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (spec) { spectators.delete(ws); return; }
     if (!me) return;
+    if (game.phase === 'playing') dropItems(me);
     game.players.delete(me.id);
     console.log(`[leave] ${me.name}`);
     broadcast({ t: 'ev', e: 'left', id: me.id, name: me.name });
@@ -572,7 +590,7 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log('\n  C H U D A I L');
+  console.log('\n  C H U D A I L   B U S T E R S');
   console.log('  ───────────────────');
   console.log(`  You:            http://localhost:${PORT}`);
   for (const a of lanAddresses()) console.log(`  Friends (Wi-Fi): http://${a}:${PORT}`);
