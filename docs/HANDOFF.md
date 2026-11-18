@@ -99,7 +99,7 @@ Clients render remote things 130 ms in the past and interpolate (`INTERP_MS` in 
 
 ---
 
-## 7. WORK IN PROGRESS: branch `feature/multifloor-shrine`
+## 7. Multi-floor house + shrine finale + difficulty (merged into `main`)
 
 Goal requested by the owner:
 1. **Bigger house with multiple floors**: basement, ground floor, upper floor, connected by staircases.
@@ -248,13 +248,16 @@ Verified:
   pentagram, plinths, candles, chains); picking up an item and placing it on a star point works (plinth shows the
   item, star icon lights, messages); difficulty chosen in the lobby reaches the game; 60 FPS.
 
-NOT yet verified in a real browser playthrough (do these next, with the Browser pane visible, since a hidden pane pauses
-requestAnimationFrame and makes tests lie):
-- Lure stage visuals (`stage:'lure'`: star blaze, red column) and the `bound` cinematic (monster sinking, flash).
+- Lure rule (fixed after testing): players standing inside the burning star cannot be killed, and while she chases
+  someone inside it she is dragged to the centre (`inStar` in the monster steering, server.js). Bot tests standing at the
+  centre and at the edge both end `bound → escape → END win=true`.
+- In the browser: all 5 items picked up and placed with the real controls, stage `lure` + active shrine (red column, 5
+  stars lit); death switches to spectating a teammate (briefing overlay now hidden).
+
+Still worth a human playthrough (not blocking):
+- The `bound` cinematic (monster sinking, flash) seen from inside the star.
 - Dropped items (`drop` event) appearing at a dead player's body on the right floor.
-- Death/end screens on the new build (one test round ended server-side while the tab was hidden).
 - Crawler on upper/basement floors; spectator drone above the roof (all floors visible).
-- Then merge `feature/multifloor-shrine` into `main` and restart the live server.
 
 Original checklist:
 

@@ -3,7 +3,7 @@
 A co-op first-person horror game for 1–6 players, played in the browser.
 
 Ashgrove Sanatorium closed in 1974. The patients whispered about a *chudail*: a woman with long black hair whose feet point backwards. She still walks the wards.
-Find the **five bone effigies** to break the seal on the foyer door, then get out alive.
+The house has three floors: the basement, the ground floor and the upper floor, joined by staircases. Somewhere in the basement she built a black-magic shrine: a pentagram drawn in blood. Find the five things it needs, fill the star, trap her in it, then get out alive.
 
 ## Start the game
 
@@ -35,11 +35,26 @@ The link changes each time you start, and stops working when you close the game.
 
 Everyone picks a survivor in the lobby (8 characters), then anyone presses **Begin**.
 
+## Difficulty
+
+Pick one in the lobby before anyone presses **Begin**:
+
+| Mode | What changes |
+| --- | --- |
+| Easy | she is slower, sees and hears less, no Crawler, more supplies, longer to revive friends |
+| Normal | the intended game |
+| Hard | faster, sees and hears further, fewer supplies, less time to revive |
+| Nightmare | much faster and sharper, very few supplies, almost no time to revive |
+
 ## How to win
 
-1. **Find the 5 bone effigies.** Read the notes the staff left behind: they tell you which room and wing each one is in. Every effigy you take makes her faster.
-2. **Her heart beats in ROOM 41.** Once all five are taken, find ROOM 41 (signs hang above every door) and **hold E at the altar for 4 seconds** to burn her heart. She knows the moment you start, so have your friends guard you.
-3. **Run.** The foyer door opens, the lights turn red, and she is faster than ever. Get out.
+1. **Find the 5 ritual items:** a Human Skull, a Black Candle, a Cracked Mirror, a Cursed Doll and a Braid of Her Hair.
+   They are spread over all three floors. Read the notes the staff left behind: each one says which room, wing and floor an item is in.
+   Every item you take makes her faster. If you die, the items you carried drop where you fell.
+2. **Fill the star.** Take the stairs down to the basement shrine and place one item on each point of the pentagram (E).
+3. **Lure her into the centre.** When the fifth item goes down, the star starts to burn. While it burns she cannot touch anyone standing inside it.
+   Make noise, let her see you, and wait inside the star: when she comes for you, it drags her into the middle and binds her.
+4. **Run.** The front door in the ground-floor foyer opens. Get out.
 
 ## Controls
 
@@ -50,7 +65,7 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 | Ctrl (or Alt) + move | sneak: slow and completely silent |
 | C | crouch: completely silent; with your light off she can walk right past you |
 | F | flashlight (the battery drains; find spare batteries) |
-| E | take, read notes, hide in lockers and wardrobes, burn the heart (hold), revive a friend (hold) |
+| E | take, read notes, place items on the star, hide in lockers, wardrobes and under beds, revive a friend (hold) |
 | Q | ring a **spirit bell**: freezes her for 6 seconds and scares the Crawler away |
 
 ## The things that hunt you
@@ -58,7 +73,7 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 - **The Chudail:** tall, pale, long black hair, feet turned backwards. She carries a cold glow, so you can see her coming.
   - She hunts by sound and light. Sneaking is silent.
   - Shine your torch in her face and she slows down, but then she knows exactly where you are.
-- **The Crawler:** wakes after the first effigy. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
+- **The Crawler:** wakes after the first ritual item is taken. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
 - **Lockers and wardrobes:** if she *sees you get in*, she drags you out. Break line of sight first.
 - **Aatma candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
 - Teammates glow through walls in their player color, so you never lose each other.
@@ -75,8 +90,8 @@ On weak laptops close other tabs; Chrome or Edge gives the best performance.
 ```
 server.js               game server: lobby, monster AI, hiding, scares
 shared/map.js           random level generator shared by server and browser
-public/main.js          game client: player, networking, scares, notes, bells, finale, post-processing
-public/world.js         builds the 3D asylum (rooms, doors, props, lockers, lights)
+public/main.js          game client: player, floors and stairs, networking, scares, notes, bells, shrine finale, post-processing
+public/world.js         builds the 3D house on 3 floors (rooms, stairs, props, lockers, lights, the pentagram shrine)
 public/entities.js      the monster, players, loading 3D models
 public/textures.js      hand-painted textures (all generated in code)
 public/audio.js         generated horror audio (ambience, footsteps, stingers)
@@ -99,6 +114,6 @@ To rebuild the Blender models:
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0
 - The Chudail and the Crawler: modeled with a script in Blender for this game
-- Fonts: IM Fell English SC, Courier Prime, Homemade Apple, Rubik Wet Paint, Nosifer (Google Fonts, OFL)
+- Fonts: Creepster, Eczar, Kalam, IM Fell English SC, Courier Prime, Homemade Apple, Rubik Wet Paint, Nosifer (Google Fonts, OFL)
 - Online play: Cloudflare quick tunnels (`cloudflared`)
 - Engine: [three.js](https://threejs.org) (MIT), [ws](https://github.com/websockets/ws) (MIT)
