@@ -1,4 +1,4 @@
-# CHUDAIL
+# CHUDAIL BUSTERS (चुड़ैल)
 
 A co-op first-person horror game for 1–6 players, played in the browser.
 
@@ -60,7 +60,7 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
   - Shine your torch in her face and she slows down, but then she knows exactly where you are.
 - **The Crawler:** wakes after the first effigy. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
 - **Lockers and wardrobes:** if she *sees you get in*, she drags you out. Break line of sight first.
-- **Soul candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
+- **Aatma candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
 - Teammates glow through walls in their player color, so you never lose each other.
 - Dead players watch the survivors (click to switch) until someone revives them.
 - Inside a locker your eyes adjust to the dark: you can watch through the vents. If she saw you get in she will stop and listen at the door, and she doesn't always open it.

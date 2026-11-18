@@ -505,7 +505,7 @@ function onEvent(m) {
           message(`${nameOf(m.by)} found an effigy (${S.collected}/${TALISMANS})`);
         }
       } else if (kind === 'r' && m.by === S.myId) {
-        S.me.revives = m.revives; audio.holyBell(S.me.x, S.me.z); message(`Soul candle (${m.revives}). Hold E over a fallen friend to bring them back.`);
+        S.me.revives = m.revives; audio.holyBell(S.me.x, S.me.z); message(`Aatma candle (${m.revives}). Hold E over a fallen friend to bring them back.`);
       } else if (kind === 'w' && m.by === S.myId) {
         S.me.bells = m.bells; audio.pickupBattery(); message(`Spirit bell (${m.bells}). Press Q to ring it and freeze her.`);
       } else if (kind === 'b' && m.by === S.myId) {
@@ -678,7 +678,7 @@ function showBriefing() {
     <div class="bh">TO SURVIVE</div>
     <ul>
       <li><span style="color:#ffd27a">Spirit bells</span>: press <kbd>Q</kbd> to freeze her for 6 seconds.</li>
-      <li><span style="color:#9fd8ff">Soul candles</span>: hold <kbd>E</kbd> over a fallen friend to bring them back.</li>
+      <li><span style="color:#9fd8ff">Aatma candles</span>: hold <kbd>E</kbd> over a fallen friend to bring them back.</li>
       <li>Hide in lockers and wardrobes, but never while she is watching.</li>
       <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent.</li>
       <li>Something lives on the ceiling once the first bone is taken. Look up.</li>
@@ -1186,7 +1186,7 @@ function updateInteract() {
   for (const [id, tl] of S.world.talismans) if (!tl.taken) consider(id, tl.x, tl.z, 2.4, 'Take the bone effigy');
   for (const [id, b] of S.world.batteries) if (!b.taken) consider(id, b.x, b.z, 1.9, 'Pick up battery');
   for (const [id, b] of S.world.bells) if (!b.taken) consider(id, b.x, b.z, 1.9, 'Take the spirit bell');
-  for (const [id, c] of S.world.souls) if (!c.taken) consider(id, c.x, c.z, 1.9, 'Take the soul candle');
+  for (const [id, c] of S.world.souls) if (!c.taken) consider(id, c.x, c.z, 1.9, 'Take the aatma candle');
   // a fallen friend: hold E with a soul candle to bring them back
   for (const r of S.players.values()) {
     if (r.alive || r.escaped) continue;
@@ -1203,8 +1203,8 @@ function updateInteract() {
           return;
         }
       }
-      best = { id: 'revive', revive: true, target: r.id, label: `Hold E to revive ${esc(r.name)} (soul candle)` };
-    } else best = { id: 'nocandle', label: `Find a soul candle to revive ${esc(r.name)}` };
+      best = { id: 'revive', revive: true, target: r.id, label: `Hold E to revive ${esc(r.name)} (aatma candle)` };
+    } else best = { id: 'nocandle', label: `Find an aatma candle to revive ${esc(r.name)}` };
     break;
   }
   for (const [id, n] of S.world.notes) consider(id, n.x, n.z, 1.8, n.read ? 'Read the note again' : 'Read the note');
@@ -1243,7 +1243,7 @@ function updateHUD(dt) {
     $('battery').classList.toggle('low', me.battery < 20);
     $('stamina').querySelector('i').style.width = Math.round(me.stamina) + '%';
     $('stamina').querySelector('i').style.background = me.exhausted ? '#7a3020' : '';
-    $('bellCount').innerHTML = (me.bells > 0 ? `SPIRIT BELLS ×${me.bells}  [Q]<br>` : '') + (me.revives > 0 ? `<span style="color:#9fd8ff">SOUL CANDLES ×${me.revives}</span>` : '');
+    $('bellCount').innerHTML = (me.bells > 0 ? `SPIRIT BELLS ×${me.bells}  [Q]<br>` : '') + (me.revives > 0 ? `<span style="color:#9fd8ff">AATMA CANDLES ×${me.revives}</span>` : '');
   }
   hudT -= dt;
   if (hudT > 0) return;

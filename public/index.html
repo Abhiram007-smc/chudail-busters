@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CHUDAIL</title>
+<title>चुड़ैल · CHUDAIL BUSTERS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Homemade+Apple&family=Rubik+Wet+Paint&family=Rock+Salt&family=Nosifer&family=Butcherman&family=Eczar:wght@800&family=Kalam:wght@700&display=swap" rel="stylesheet" />
 <script type="importmap">
 { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
 </script>
@@ -15,13 +15,19 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #000; color: var(--bone); font-family: 'Courier Prime', 'Courier New', monospace; overflow: hidden; user-select: none; }
   canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 10; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: safe center; flex-direction: column; z-index: 10; overflow-y: auto; padding: 24px 0; }
   .screen.show { display: flex; }
   #grain { position: fixed; inset: 0; pointer-events: none; z-index: 9; opacity: .12; mix-blend-mode: screen; }
 
   /* ---------- menu ---------- */
   #menu { background: radial-gradient(ellipse at 50% 60%, #1a0d0b 0%, #070405 55%, #000 100%); }
-  .title { font-family: 'IM Fell English SC', serif; font-size: clamp(46px, 10vw, 124px); letter-spacing: .28em; margin: 0 0 6px .32em; color: #cfc4a8; text-shadow: 0 0 18px rgba(150,0,0,.6), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); animation: flick 6s infinite; }
+  .logo { position: relative; text-align: center; margin-bottom: 26px; }
+  .hindi { position: relative; display: inline-block; font-family: 'Eczar', serif; font-weight: 800; font-size: clamp(72px, 15vw, 176px); line-height: 1.05; color: #a00d0d;
+    text-shadow: 0 0 28px rgba(200,0,0,.55), 0 0 4px #300, 0 7px 0 #250000; filter: url(#rough); animation: flick 7s infinite; }
+  .drip { position: absolute; top: 78%; width: 6px; border-radius: 0 0 6px 6px; background: linear-gradient(#a00d0d, #5a0404); box-shadow: 0 0 8px rgba(160,0,0,.6); animation: drip 6s ease-in infinite; transform-origin: top; }
+  .drip::after { content: ''; position: absolute; bottom: -5px; left: -2px; width: 10px; height: 10px; border-radius: 50%; background: #6a0606; }
+  @keyframes drip { 0% { height: 0; opacity: 1 } 70% { opacity: 1 } 100% { height: var(--h); opacity: 0 } }
+  .title { font-family: 'Nosifer', 'Butcherman', serif; font-size: clamp(24px, 5.2vw, 60px); letter-spacing: .14em; margin: -6px 0 0 .14em; color: #d8cdb2; text-shadow: 0 0 18px rgba(150,0,0,.7), 3px 0 rgba(255,0,0,.25), -3px 0 rgba(0,180,255,.12); }
   .sub { color: var(--dim); letter-spacing: .4em; font-size: 13px; margin-bottom: 38px; text-transform: uppercase; }
   @keyframes flick { 0%,19%,21%,62%,64%,100% { opacity: 1 } 20%, 63% { opacity: .25 } 20.5% { opacity: .8 } }
   .panel { width: min(620px, 94vw); max-height: 92vh; overflow-y: auto; background: rgba(8,6,6,.72); border: 1px solid #2a1c18; padding: 26px 28px; box-shadow: 0 0 60px rgba(0,0,0,.9), inset 0 0 40px rgba(60,0,0,.15); }
@@ -88,16 +94,16 @@
   #prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 16px; letter-spacing: .2em; color: #e6dcc2; text-shadow: 0 0 10px #000; opacity: 0; transition: opacity .2s; }
   #prompt b { border: 1px solid #e6dcc2; padding: 1px 8px; margin-right: 8px; }
   #messages { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(640px, 60%); }
-  #messages div { font-family: 'IM Fell English SC', serif; font-size: 26px; letter-spacing: .08em; color: #e8dcc0; text-shadow: 0 0 12px #000, 0 0 30px #300; margin-bottom: 10px; animation: msg 5s forwards; }
+  #messages div { font-family: 'Butcherman', 'IM Fell English SC', serif; font-size: 26px; letter-spacing: .1em; color: #e8dcc0; text-shadow: 0 0 12px #000, 0 0 30px #300; margin-bottom: 10px; animation: msg 5s forwards; }
   #messages div.red { color: #ff5a40; }
   @keyframes msg { 0% { opacity: 0; transform: translateY(6px) } 8% { opacity: 1; transform: none } 80% { opacity: 1 } 100% { opacity: 0 } }
   #spectate { position: absolute; bottom: 60px; width: 100%; text-align: center; font-size: 16px; letter-spacing: .25em; color: #b33; display: none; text-shadow: 0 0 10px #000; }
 
   #resume { background: rgba(0,0,0,.55); z-index: 8; cursor: pointer; }
-  #resume h2 { font-family: 'IM Fell English SC', serif; font-size: 40px; letter-spacing: .25em; font-weight: normal; }
+  #resume h2 { font-family: 'Butcherman', serif; font-size: 44px; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 0 20px rgba(150,0,0,.7); font-weight: normal; }
   #resume p { color: #8f8676; }
   #brief { display: none; width: min(620px, 92vw); background: rgba(8,6,6,.85); border: 1px solid #3a2620; padding: 22px 28px; margin-bottom: 18px; font-size: 14px; line-height: 1.6; color: #b9ae96; }
-  #brief .bh { font-family: 'IM Fell English SC', serif; font-size: 20px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
+  #brief .bh { font-family: 'Butcherman', serif; font-size: 22px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
   #brief ol, #brief ul { margin: 0 0 14px; padding-left: 22px; }
   #brief li { margin-bottom: 4px; }
   #brief b { color: #e6dcc2; }
@@ -118,7 +124,7 @@
   #death p { color: #6d675c; letter-spacing: .3em; opacity: 0; animation: fadein 2s 1.6s forwards; }
   @keyframes fadein { to { opacity: 1 } }
   #end { background: radial-gradient(#0d0606, #000 70%); z-index: 16; }
-  #end h1 { font-family: 'IM Fell English SC', serif; font-size: clamp(36px, 7vw, 84px); letter-spacing: .12em; font-weight: normal; margin: 0 0 24px; }
+  #end h1 { font-family: 'Butcherman', serif; font-size: clamp(36px, 7vw, 84px); letter-spacing: .12em; font-weight: normal; margin: 0 0 24px; }
   #end h1.win { color: #e6dcc2; text-shadow: 0 0 30px rgba(200,220,255,.4); }
   #end h1.lose { color: var(--blood); font-family: 'Nosifer', serif; letter-spacing: .05em; }
   #end ul { list-style: none; padding: 0; font-size: 20px; line-height: 2; text-align: center; }
@@ -141,12 +147,13 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter></svg>
 <canvas id="view"></canvas>
 <canvas id="grain" width="256" height="256"></canvas>
 
 <div id="menu" class="screen show">
-  <div class="title">CHUDAIL</div>
-  <div class="sub">a co-op horror for 1 to 6 souls</div>
+  <div class="logo"><div class="hindi">चुड़ैल<span class="drip" style="left:14%;--h:70px;animation-delay:.4s"></span><span class="drip" style="left:33%;--h:110px;animation-delay:2.1s"></span><span class="drip" style="left:52%;--h:55px;animation-delay:1.2s"></span><span class="drip" style="left:71%;--h:95px;animation-delay:3.3s"></span><span class="drip" style="left:86%;--h:40px;animation-delay:4.4s"></span></div><div class="title">CHUDAIL BUSTERS</div></div>
+  <div class="sub">a co-op horror for 1 to 6 aatma</div>
   <div class="panel">
     <p>Ashgrove Sanatorium closed in 1974, the night the staff vanished. The patients whispered about a <i>chudail</i>: a woman with long black hair whose feet point backwards. She still walks the wards. She doesn't stop and she never sleeps.</p>
     <p>Read the <span style="color:#e6dcc2">notes</span> the staff left behind: they say where the bones are hidden. Find the <span style="color:#ff8a3a">five bone effigies</span> to break the seal on the foyer door, then get out. <span style="color:#c44">It hears you running. It sees your light.</span> Shine your torch in its face and it slows down, but then it knows exactly where you are.</p>
@@ -166,7 +173,7 @@
 </div>
 
 <div id="lobby" class="screen">
-  <div class="title" style="font-size:48px">CHUDAIL</div>
+  <div class="logo" style="margin-bottom:14px"><div class="hindi" style="font-size:84px">चुड़ैल</div><div class="title" style="font-size:30px">CHUDAIL BUSTERS</div></div>
   <div class="panel">
     <label>Survivors <span id="pcount"></span></label>
     <ul class="plist" id="plist"></ul>
@@ -204,7 +211,7 @@
 
 <div id="scare"></div>
 <div id="faceflash"></div>
-<div id="death" class="screen"><h1>IT TOOK YOU</h1><p>you will watch the others</p></div>
+<div id="death" class="screen"><div class="hindi" style="font-family:'Kalam',cursive;font-size:clamp(44px,8vw,96px);filter:none;opacity:0;animation:fadein 2.5s .2s forwards">वो तुम्हें ले गई</div><h1>SHE TOOK YOU</h1><p>you will watch the others</p></div>
 <div id="end" class="screen"><h1 id="endTitle"></h1><ul id="endList"></ul><div class="small">returning to the lobby…</div></div>
 
 <script type="module" src="./main.js"></script>
