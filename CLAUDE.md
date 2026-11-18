@@ -2,9 +2,8 @@
 
 Co-op multiplayer browser horror game (three.js client + Node/ws server, no build step).
 
-- Start here: **`docs/HANDOFF.md`**: architecture, protocol, testing approach and the exact TODO list
-  for the work in progress (3 floors + pentagram shrine finale + difficulty modes on branch
-  `feature/multifloor-shrine`).
+- Start here: **`docs/HANDOFF.md`**: architecture, protocol, testing approach and status (3 floors,
+  pentagram shrine finale and difficulty modes are merged into `main`).
 - Run: `npm install && npm start` (http://localhost:3000). `npm run online` adds a Cloudflare tunnel link.
 - Test without disturbing a live game: `PORT=3001 node server.js`; drive the page via `window.__hm`.
 - `shared/map.js` runs on server AND client: keep it deterministic (only use the seeded `rng`).

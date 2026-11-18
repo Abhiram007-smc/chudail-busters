@@ -1,6 +1,6 @@
 // Builds the 3D level from the shared map data.
 import * as THREE from 'three';
-import { CELL, WALL_H, mulberry32 } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, mulberry32 } from '/shared/map.js';
 import * as TX from './textures.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -67,7 +67,10 @@ export function buildWorld(scene, map) {
   const world = { colliders: [], lightSources: [], doors: [], talismans: new Map(), batteries: new Map(), bulbs: [], disposables: [], hides: new Map(), cull: [] };
   const cullable = (o, x, z) => world.cull.push({ o, x, z });
   const W = map.W, H = map.H;
-  const floorAt = (i, j) => i >= 0 && j >= 0 && i < W && j < H && map.grid[j * W + i] !== 0;
+  // one group per floor, raised to its height; everything on a floor goes in its group
+  world.levelGroups = {};
+  for (const L of LEVELS) { const g = new THREE.Group(); g.position.y = L * FLOOR_H; g.name = 'level' + L; scene.add(g); world.levelGroups[L] = g; }
+  const lvl = (L) => world.levelGroups[L ?? 0];
   const rng = mulberry32(map.seed ^ 0xabcdef);
 
   // ---------- materials ----------
@@ -82,34 +85,60 @@ export function buildWorld(scene, map) {
   const porcelain = new THREE.MeshStandardMaterial({ color: 0xbdb8a8, roughness: 0.35, map: TX.toTex(TX.fabricCanvas()) });
   world.mats = { woodDark, metal, fabric };
 
-  // ---------- floors / ceilings / walls ----------
-  const fWood = quadBuilder(), fTile = quadBuilder(), ceil = quadBuilder();
-  const walls = [quadBuilder(), quadBuilder(), quadBuilder()];
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    if (!floorAt(i, j)) continue;
-    const x0 = i * CELL, x1 = x0 + CELL, z0 = j * CELL, z1 = z0 + CELL;
-    const isRoom = map.grid[j * W + i] === 1;
-    const u0 = (i % 2) / 2, u1 = u0 + 0.5, v0 = (j % 2) / 2, v1 = v0 + 0.5;
-    (isRoom ? fWood : fTile).add([x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0], [0, 1, 0], [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]);
-    ceil.add([x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1], [0, -1, 0], [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]);
-    for (const [dx, dz] of DIRS) {
-      if (floorAt(i + dx, j + dz)) continue;
-      const n = [-dx, 0, -dz];
-      const cx = (i + 0.5) * CELL + dx * CELL / 2, cz = (j + 0.5) * CELL + dz * CELL / 2;
-      // right vector = (-n) x up = (dx,0,dz) x (0,1,0) = (-dz, 0, dx)
-      const rx = -dz, rz = dx;
-      const p0 = [cx - rx * CELL / 2, 0, cz - rz * CELL / 2], p1 = [cx + rx * CELL / 2, 0, cz + rz * CELL / 2];
-      const v = rng() < 0.12 ? 1 : rng() < 0.15 ? 2 : 0;
-      walls[v].add(p0, p1, [p1[0], WALL_H, p1[2]], [p0[0], WALL_H, p0[2]], n, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-    }
-  }
-  const addMesh = (geo, m, shadow = true) => {
-    const mesh = new THREE.Mesh(geo, m); mesh.receiveShadow = true; mesh.castShadow = shadow; scene.add(mesh); return mesh;
+  // ---------- floors / ceilings / walls (per floor) ----------
+  const addMesh = (geo, m, parent, shadow = true) => {
+    const mesh = new THREE.Mesh(geo, m); mesh.receiveShadow = true; mesh.castShadow = shadow; parent.add(mesh); return mesh;
   };
-  addMesh(fWood.build(), woodFloor, false);
-  addMesh(fTile.build(), tileFloor, false);
-  addMesh(ceil.build(), ceilMat, false);
-  walls.forEach((w, k) => addMesh(w.build(), wallMats[k]));
+  for (const L of LEVELS) {
+    const g = map.grid[L];
+    const ty = (i, j) => (i >= 0 && j >= 0 && i < W && j < H ? g[j * W + i] : 0);
+    const fWood = quadBuilder(), fTile = quadBuilder(), ceil = quadBuilder();
+    const walls = [quadBuilder(), quadBuilder(), quadBuilder()];
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const t = ty(i, j);
+      if (!t) continue;
+      const x0 = i * CELL, x1 = x0 + CELL, z0 = j * CELL, z1 = z0 + CELL;
+      const u0 = (i % 2) / 2, u1 = u0 + 0.5, v0 = (j % 2) / 2, v1 = v0 + 0.5;
+      // no floor over a stairwell hole (4) or under a ramp (3: the steps are the floor); no ceiling above a ramp
+      if (t === 1 || t === 2) (t === 1 ? fWood : fTile).add([x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0], [0, 1, 0], [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]);
+      if (t !== 3) ceil.add([x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1], [0, -1, 0], [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]);
+      for (const [dx, dz] of DIRS) {
+        if (ty(i + dx, j + dz) !== 0) continue;
+        const n = [-dx, 0, -dz];
+        const cx = (i + 0.5) * CELL + dx * CELL / 2, cz = (j + 0.5) * CELL + dz * CELL / 2;
+        const rx = -dz, rz = dx;
+        const p0 = [cx - rx * CELL / 2, 0, cz - rz * CELL / 2], p1 = [cx + rx * CELL / 2, 0, cz + rz * CELL / 2];
+        const v = rng() < 0.12 ? 1 : rng() < 0.15 ? 2 : 0;
+        walls[v].add(p0, p1, [p1[0], WALL_H, p1[2]], [p0[0], WALL_H, p0[2]], n, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+      }
+    }
+    addMesh(fWood.build(), woodFloor, lvl(L), true);
+    addMesh(fTile.build(), tileFloor, lvl(L), true);
+    addMesh(ceil.build(), ceilMat, lvl(L), false);
+    walls.forEach((w, k) => addMesh(w.build(), wallMats[k], lvl(L)));
+  }
+
+  // ---------- staircases ----------
+  for (const st of map.stairs) {
+    const g = new THREE.Group(); lvl(st.L).add(g);
+    const [dx, dz] = st.d, steps = 12, run = 2 * CELL / steps, rise = FLOOR_H / steps;
+    const sx = (st.c1[0] + 0.5) * CELL - dx * CELL / 2, sz = (st.c1[1] + 0.5) * CELL - dz * CELL / 2;
+    const along = (k) => [sx + dx * run * (k + 0.5), sz + dz * run * (k + 0.5)];
+    for (let k = 0; k < steps; k++) {
+      const [x, z] = along(k), h = rise * (k + 1);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(dx ? run : CELL - 0.02, h, dz ? run : CELL - 0.02), k % 2 ? woodDark : woodPale);
+      m.position.set(x, h / 2, z); g.add(m);
+    }
+    for (const sd of [-1, 1]) { // handrails
+      const px = dz * sd * (CELL / 2 - 0.12), pz = dx * sd * (CELL / 2 - 0.12);
+      const len = Math.hypot(2 * CELL, FLOOR_H);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), metal);
+      rail.position.set(sx + dx * CELL + px, FLOOR_H / 2 + 0.9, sz + dz * CELL + pz);
+      rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx * 2 * CELL, FLOOR_H, dz * 2 * CELL).normalize());
+      g.add(rail);
+    }
+    mergeStatic(g);
+  }
 
   // ---------- doorways (pillars, header, door leaves) ----------
   const doorLeafMat = woodPale;
@@ -117,14 +146,14 @@ export function buildWorld(scene, map) {
     const bx = (d.i + 0.5) * CELL + d.dx * CELL / 2, bz = (d.j + 0.5) * CELL + d.dz * CELL / 2;
     const alongX = d.dz !== 0; // edge runs along X when moving in Z
     const T = 0.34, PW = 0.75, HB = 2.45;
-    const g = new THREE.Group(); scene.add(g);
+    const g = new THREE.Group(); lvl(d.L).add(g);
     for (const s of [-1, 1]) {
       const off = s * (CELL / 2 - PW / 2);
       const px = bx + (alongX ? off : 0), pz = bz + (alongX ? 0 : off);
       const box = new THREE.Mesh(new THREE.BoxGeometry(alongX ? PW : T, WALL_H, alongX ? T : PW), wallMats[0]);
       box.position.set(px, WALL_H / 2, pz); box.castShadow = box.receiveShadow = true; g.add(box);
       const hw = (alongX ? PW : T) / 2, hd = (alongX ? T : PW) / 2;
-      world.colliders.push([px - hw, pz - hd, px + hw, pz + hd]);
+      world.colliders.push([px - hw, pz - hd, px + hw, pz + hd, d.L]);
       // trim
       const trim = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 0.08 : T + 0.06, HB, alongX ? T + 0.06 : 0.08), woodDark);
       trim.position.set(bx + (alongX ? s * (CELL / 2 - PW) : 0), HB / 2, bz + (alongX ? 0 : s * (CELL / 2 - PW))); g.add(trim);
@@ -337,8 +366,8 @@ export function buildWorld(scene, map) {
     mergeStatic(g, ret ? [ret] : []);
     cullable(g, p.x, p.z);
     if (p.type === 'locker' || p.type === 'wardrobe' || p.type === 'bed') { const h = map.hides[hideN]; world.hides.set(h.id, { ...h, door: ret || g.add(new THREE.Group()).children[g.children.length - 1], open: 0, target: 0, busy: 0 }); hideN++; }
-    scene.add(g);
-    if (p.type !== 'doll') world.colliders.push([p.x - p.hw, p.z - p.hd, p.x + p.hw, p.z + p.hd]);
+    lvl(p.L).add(g);
+    if (p.type !== 'doll') world.colliders.push([p.x - p.hw, p.z - p.hd, p.x + p.hw, p.z + p.hd, p.L]);
   }
 
   // ---------- bulbs ----------
@@ -348,17 +377,17 @@ export function buildWorld(scene, map) {
   for (const b of map.bulbs) {
     const len = 0.4 + rng() * 0.5;
     const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, len, 4), cordMat);
-    cord.position.set(b.x, WALL_H - len / 2, b.z); scene.add(cord);
+    cord.position.set(b.x, WALL_H - len / 2, b.z); lvl(b.L).add(cord);
     const color = b.warm ? 0xffb066 : 0xd8e8ff;
     const bulbMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: color, emissiveIntensity: 2 });
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), bulbMat);
-    bulb.position.set(b.x, WALL_H - len - 0.05, b.z); scene.add(bulb);
+    bulb.position.set(b.x, WALL_H - len - 0.05, b.z); lvl(b.L).add(bulb);
     const shade = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.16, 14, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2a26, metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide }));
-    shade.position.set(b.x, WALL_H - len + 0.03, b.z); scene.add(shade);
+    shade.position.set(b.x, WALL_H - len + 0.03, b.z); lvl(b.L).add(shade);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
-    spr.scale.setScalar(0.9); spr.position.copy(bulb.position); scene.add(spr);
+    spr.scale.setScalar(0.9); spr.position.copy(bulb.position); lvl(b.L).add(spr);
     const src = {
-      x: b.x, y: WALL_H - len - 0.15, z: b.z, color: new THREE.Color(color), base: 8, dist: 13, flicker: b.flicker, dead: false,
+      x: b.x, y: WALL_H - len - 0.15 + b.L * FLOOR_H, z: b.z, L: b.L, color: new THREE.Color(color), base: 8, dist: 13, flicker: b.flicker, dead: false,
       phase: rng() * 100, mesh: bulbMat, sprite: spr, kind: 'bulb', level: 1,
     };
     world.bulbs.push(src); world.lightSources.push(src);
@@ -369,7 +398,7 @@ export function buildWorld(scene, map) {
   const bloodMats = [0, 1, 2, 3].map(() => decalMat(TX.bloodCanvas()));
   for (const b of map.blood) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(b.s, b.s), bloodMats[b.seed % 4]);
-    m.rotation.x = -Math.PI / 2; m.rotation.z = b.r; m.position.set(b.x, 0.012, b.z); m.receiveShadow = true; scene.add(m); cullable(m, b.x, b.z);
+    m.rotation.x = -Math.PI / 2; m.rotation.z = b.r; m.position.set(b.x, 0.012, b.z); m.receiveShadow = true; lvl(b.L).add(m); cullable(m, b.x, b.z);
   }
   world.bloodMats = bloodMats;
   for (const w of map.writings) {
@@ -377,7 +406,7 @@ export function buildWorld(scene, map) {
     const cx = (w.i + 0.5) * CELL + w.dx * (CELL / 2 - 0.015), cz = (w.j + 0.5) * CELL + w.dz * (CELL / 2 - 0.015);
     m.position.set(cx, 1.55 + ((w.seed % 100) / 100 - 0.5) * 0.4, cz);
     m.rotation.y = Math.atan2(-w.dx, -w.dz);
-    m.receiveShadow = true; scene.add(m); cullable(m, cx, cz);
+    m.receiveShadow = true; lvl(w.L).add(m); cullable(m, cx, cz);
   }
 
   // ---------- room signs above doorways ----------
@@ -390,7 +419,7 @@ export function buildWorld(scene, map) {
     sign.position.set(bx + d.dx * 0.18, 2.72, bz + d.dz * 0.18);
     sign.rotation.y = Math.atan2(d.dx, d.dz);
     sign.rotation.z = (rng() - 0.5) * 0.08;
-    sign.receiveShadow = true; scene.add(sign); cullable(sign, bx, bz);
+    sign.receiveShadow = true; lvl(d.L).add(sign); cullable(sign, bx, bz);
   }
 
   // ---------- notes ----------
@@ -398,56 +427,86 @@ export function buildWorld(scene, map) {
   const noteTex = TX.toTex(TX.paperCanvas(), { repeat: false });
   for (const n of map.notes) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.32), new THREE.MeshStandardMaterial({ map: noteTex, roughness: 0.95, emissive: 0x2a2620, emissiveIntensity: 0.6 }));
-    m.rotation.x = -Math.PI / 2; m.rotation.z = n.rot; m.position.set(n.x, 0.016, n.z); m.receiveShadow = true; scene.add(m); cullable(m, n.x, n.z);
+    m.rotation.x = -Math.PI / 2; m.rotation.z = n.rot; m.position.set(n.x, 0.016, n.z); m.receiveShadow = true; lvl(n.L).add(m); cullable(m, n.x, n.z);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xfff0c8, transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending }));
-    spr.scale.setScalar(0.7); spr.position.set(n.x, 0.06, n.z); scene.add(spr);
+    spr.scale.setScalar(0.7); spr.position.set(n.x, 0.06, n.z); lvl(n.L).add(spr);
     world.notes.set(n.id, { ...n, mesh: m, sprite: spr, read: false });
   }
 
-  // ---------- talismans ----------
-  const boneMat = new THREE.MeshStandardMaterial({ color: 0xa89a78, roughness: 0.75, emissive: 0x1a0c04, emissiveIntensity: 0.25 });
-  const twineMat = new THREE.MeshStandardMaterial({ color: 0x5a1010, roughness: 1 });
+  // ---------- ritual items (skull, black candle, cracked mirror, cursed doll, braid of hair) ----------
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0xb3a582, roughness: 0.7, emissive: 0x1a0c04, emissiveIntensity: 0.25 });
+  const twineMat = new THREE.MeshStandardMaterial({ color: 0x5a1010, roughness: 1, side: THREE.DoubleSide });
   const waxMat = new THREE.MeshStandardMaterial({ color: 0xe8e0c8, roughness: 0.6 });
-  for (const t of map.talismans) {
-    const g = new THREE.Group(); g.position.set(t.x, 0, t.z); scene.add(g);
-    // small table
-    box(0.9, 0.05, 0.9, woodDark, 0, 0.75, 0, g);
-    for (const [x, z] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) box(0.05, 0.75, 0.05, woodDark, x, 0.375, z, g);
-    // effigy: bound bones + skull
-    const eff = new THREE.Group(); eff.position.y = 0.78; g.add(eff);
-    const s1 = cyl(0.025, 0.7, boneMat, 0, 0.35, 0, eff); s1.rotation.z = 0.1;
-    const s2 = cyl(0.02, 0.45, boneMat, 0, 0.45, 0, eff); s2.rotation.z = Math.PI / 2 - 0.15;
-    for (const a of [0.6, -0.6]) { const l = cyl(0.018, 0.35, boneMat, a * 0.12, 0.12, 0, eff); l.rotation.z = a; }
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), boneMat); skull.scale.set(1, 1.15, 1); skull.position.y = 0.72; eff.add(skull);
-    const em = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), em); e.scale.set(1, 1.2, 0.5); e.position.set(sx * 0.034, 0.735, 0.08); eff.add(e); }
-    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.07), boneMat); jaw.position.set(0, 0.63, 0.03); eff.add(jaw);
-    for (let k = 0; k < 5; k++) { const rag = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.18 + Math.random() * 0.12), twineMat); rag.material.side = THREE.DoubleSide; rag.position.set(-0.2 + k * 0.1, 0.33, 0.02); rag.rotation.z = (Math.random() - 0.5) * 0.4; eff.add(rag); }
-    box(0.08, 0.06, 0.08, twineMat, 0, 0.45, 0, eff);
-    // candles
-    const flames = [];
-    for (let k = 0; k < 3; k++) {
-      const a = k * 2.1 + 0.4, x = Math.cos(a) * 0.3, z = Math.sin(a) * 0.3, h = 0.1 + rng() * 0.15;
-      cyl(0.03, h, waxMat, x, 0.78 + h / 2, z, g);
-      const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff9a40, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-      f.scale.set(0.12, 0.2, 1); f.position.set(x, 0.78 + h + 0.06, z); g.add(f); flames.push(f);
+  const blackWax = new THREE.MeshStandardMaterial({ color: 0x0b0a0a, roughness: 0.4 });
+  const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x9fb0b8, metalness: 1, roughness: 0.06 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0x0a0807, roughness: 0.55 });
+  const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const flameSprite = (color = 0xff9a40, sx = 0.12, sy = 0.2) => { const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); f.scale.set(sx, sy, 1); return f; };
+  function makeItem(kind) {
+    const g = new THREE.Group();
+    if (kind === 'skull') {
+      const sk = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), boneMat); sk.scale.set(1, 1.1, 1.15); sk.position.y = 0.15; g.add(sk);
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.11), boneMat); jaw.position.set(0, 0.04, 0.05); g.add(jaw);
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), voidMat); e.scale.set(1, 1.2, 0.5); e.position.set(sx * 0.05, 0.17, 0.125); g.add(e); }
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.04, 3), voidMat); nose.rotation.x = Math.PI; nose.position.set(0, 0.11, 0.14); g.add(nose);
+    } else if (kind === 'candle') {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.42, 12), blackWax); c.position.y = 0.21; g.add(c);
+      const drip = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), blackWax); drip.rotation.x = Math.PI / 2; drip.position.y = 0.4; g.add(drip);
+      const f = flameSprite(0xff3a1a, 0.12, 0.24); f.position.y = 0.5; g.add(f); g.userData.flame = f;
+    } else if (kind === 'mirror') {
+      const fr = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 8, 24), woodDark); fr.scale.y = 1.35; fr.position.y = 0.26; g.add(fr);
+      const glass = new THREE.Mesh(new THREE.CircleGeometry(0.16, 24), mirrorMat); glass.scale.y = 1.35; glass.position.set(0, 0.26, 0.004); g.add(glass);
+      const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.008, 0.36), voidMat); crack.rotation.z = 0.5; crack.position.set(0.02, 0.27, 0.01); g.add(crack);
+      const crack2 = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.2), voidMat); crack2.rotation.z = -0.9; crack2.position.set(-0.04, 0.3, 0.011); g.add(crack2);
+      g.rotation.x = -0.25;
+    } else if (kind === 'doll') {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.1), fabric); body.position.y = 0.13; g.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), porcelain); head.position.y = 0.32; head.rotation.z = 0.6; g.add(head);
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 4), voidMat); e.position.set(sx * 0.032, 0.33, 0.08); g.add(e); }
+      for (let k = 0; k < 5; k++) { const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.14, 4), metal); pin.position.set((rng() - 0.5) * 0.14, 0.14 + rng() * 0.2, 0.06); pin.rotation.set(1.2 + rng(), rng(), rng()); g.add(pin); }
+      for (const sx of [-1, 1]) { const a = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), fabric); a.position.set(sx * 0.11, 0.14, 0); a.rotation.z = sx * 0.4; g.add(a); }
+    } else { // braid of her hair
+      const pts = []; for (let k = 0; k <= 24; k++) pts.push(new THREE.Vector3(Math.sin(k * 0.9) * 0.05, 0.02 + k * 0.022, Math.cos(k * 0.9) * 0.03));
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.028, 6), hairMat); tube.rotation.z = 1.35; tube.position.set(0.25, 0.04, 0); g.add(tube);
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.012, 6, 10), twineMat); tie.position.set(-0.17, 0.05, 0); tie.rotation.y = Math.PI / 2; g.add(tie);
     }
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff7a30, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    halo.scale.setScalar(1.6); halo.position.y = 1.0; g.add(halo);
-    const src = { x: t.x, y: 1.3, z: t.z, color: new THREE.Color(0xff8a3a), base: 4, dist: 8, flicker: false, candle: true, dead: false, phase: rng() * 100, kind: 'candle', level: 1 };
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
+  world.makeItem = makeItem;
+  for (const t of map.talismans) {
+    const g = new THREE.Group(); g.position.set(t.x, 0, t.z); lvl(t.L).add(g);
+    // an old stool with two candles, the item sitting on it
+    const stool = new THREE.Group(); g.add(stool);
+    box(0.6, 0.05, 0.6, woodDark, 0, 0.55, 0, stool);
+    for (const [x, z] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) box(0.04, 0.55, 0.04, woodDark, x, 0.275, z, stool);
+    const flames = [];
+    for (const k of [0, 1]) {
+      const x = k ? 0.22 : -0.22, h = 0.12 + rng() * 0.1;
+      cyl(0.025, h, waxMat, x, 0.58 + h / 2, -0.18, stool);
+      const f = flameSprite(); f.position.set(x, 0.58 + h + 0.05, -0.18); stool.add(f); flames.push(f);
+    }
+    const item = makeItem(t.kind); item.position.y = 0.58; g.add(item);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff6a30, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(1.5); halo.position.y = 0.8; g.add(halo);
+    const src = { x: t.x, y: 1.2 + t.L * FLOOR_H, z: t.z, L: t.L, color: new THREE.Color(0xff8a3a), base: 4, dist: 8, flicker: false, candle: true, dead: false, phase: rng() * 100, kind: 'candle', level: 1 };
     world.lightSources.push(src);
-    world.talismans.set(t.id, { group: g, eff, flames, halo, src, x: t.x, z: t.z, taken: false });
+    world.talismans.set(t.id, {
+      group: g, item, stool, flames, halo, src, x: t.x, z: t.z, L: t.L, kind: t.kind, name: t.name, taken: false,
+      // dropped by a dead player: lies on the floor wherever they fell
+      moveTo(x, z, L) { this.x = x; this.z = z; this.L = L; lvl(L).add(this.group); this.group.position.set(x, 0, z); this.stool.visible = false; this.item.position.y = 0.02; this.src.dead = true; },
+    });
   }
 
   // ---------- batteries ----------
   const batMat = new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.6, roughness: 0.4 });
   const batBand = new THREE.MeshStandardMaterial({ color: 0x103010, emissive: 0x40ff60, emissiveIntensity: 1.2 });
   for (const b of map.batteries) {
-    const g = new THREE.Group(); g.position.set(b.x, 0.06, b.z); g.rotation.set(0, rng() * 6, Math.PI / 2); scene.add(g);
+    const g = new THREE.Group(); g.position.set(b.x, 0.06, b.z); g.rotation.set(0, rng() * 6, Math.PI / 2); lvl(b.L).add(g);
     cyl(0.05, 0.22, batMat, 0, 0, 0, g); cyl(0.052, 0.05, batBand, 0, 0.06, 0, g); cyl(0.02, 0.03, metal, 0, 0.12, 0, g);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x50ff70, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    spr.scale.setScalar(0.6); spr.position.set(b.x, 0.1, b.z); scene.add(spr);
-    world.batteries.set(b.id, { group: g, sprite: spr, x: b.x, z: b.z, taken: false });
+    spr.scale.setScalar(0.6); spr.position.set(b.x, 0.1, b.z); lvl(b.L).add(spr);
+    world.batteries.set(b.id, { group: g, sprite: spr, x: b.x, z: b.z, L: b.L, taken: false });
   }
 
   // ---------- spirit bells ----------
@@ -455,68 +514,134 @@ export function buildWorld(scene, map) {
   const brass = new THREE.MeshStandardMaterial({ color: 0xb08a3a, metalness: 0.85, roughness: 0.35, emissive: 0x2a1a04, emissiveIntensity: 0.6 });
   const bellProfile = [[0.0, 0], [0.11, 0.0], [0.105, 0.02], [0.08, 0.06], [0.065, 0.12], [0.06, 0.16], [0.04, 0.19], [0.0, 0.2]].map(([r, y]) => new THREE.Vector2(r, y));
   for (const b of map.bells) {
-    const g = new THREE.Group(); g.position.set(b.x, 0, b.z); g.rotation.y = rng() * 6; scene.add(g);
+    const g = new THREE.Group(); g.position.set(b.x, 0, b.z); g.rotation.y = rng() * 6; lvl(b.L).add(g);
     const bellM = new THREE.Mesh(new THREE.LatheGeometry(bellProfile, 16), brass); bellM.castShadow = true; g.add(bellM);
     cyl(0.012, 0.16, woodDark, 0, 0.28, 0, g);
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), woodDark); knob.position.y = 0.37; g.add(knob);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffd27a, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    spr.scale.setScalar(0.8); spr.position.set(b.x, 0.18, b.z); scene.add(spr);
-    world.bells.set(b.id, { group: g, sprite: spr, x: b.x, z: b.z, taken: false });
+    spr.scale.setScalar(0.8); spr.position.set(b.x, 0.18, b.z); lvl(b.L).add(spr);
+    world.bells.set(b.id, { group: g, sprite: spr, x: b.x, z: b.z, L: b.L, taken: false });
   }
 
   // ---------- soul candles (revive a friend) ----------
   world.souls = new Map();
   const soulWax = new THREE.MeshStandardMaterial({ color: 0xcfd8e0, roughness: 0.5, emissive: 0x203040, emissiveIntensity: 0.6 });
   for (const c of map.souls) {
-    const g = new THREE.Group(); g.position.set(c.x, 0, c.z); scene.add(g);
+    const g = new THREE.Group(); g.position.set(c.x, 0, c.z); lvl(c.L).add(g);
     cyl(0.06, 0.08, metal, 0, 0.04, 0, g);
     cyl(0.045, 0.32, soulWax, 0, 0.24, 0, g);
     const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x7fd0ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     f.scale.set(0.14, 0.26, 1); f.position.y = 0.48; g.add(f);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x6ab8ff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    spr.scale.setScalar(1.1); spr.position.set(c.x, 0.45, c.z); scene.add(spr);
-    world.souls.set(c.id, { group: g, flame: f, sprite: spr, x: c.x, z: c.z, taken: false });
+    spr.scale.setScalar(1.1); spr.position.set(c.x, 0.45, c.z); lvl(c.L).add(spr);
+    world.souls.set(c.id, { group: g, flame: f, sprite: spr, x: c.x, z: c.z, L: c.L, taken: false });
   }
 
-  // ---------- ROOM 41: her heart ----------
+  // ---------- THE SHRINE: a black-magic pentagram in the basement ----------
   {
-    const h = map.heart;
-    const g = new THREE.Group(); g.position.set(h.x, 0, h.z); scene.add(g);
-    const stone = new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.95, map: TX.toTex(TX.rustCanvas()) });
-    box(1.5, 0.8, 0.9, stone, 0, 0.4, 0, g);
-    box(1.7, 0.08, 1.05, stone, 0, 0.82, 0, g);
-    const circle = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), new THREE.MeshStandardMaterial({ map: TX.toTex(TX.ritualCanvas(), { repeat: false }), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, emissive: 0x550000, emissiveMap: TX.toTex(TX.ritualCanvas(), { repeat: false }), emissiveIntensity: 0.5 }));
-    circle.rotation.x = -Math.PI / 2; circle.position.y = 0.015; g.add(circle);
-    const heartMat = new THREE.MeshStandardMaterial({ color: 0x6a0c0c, roughness: 0.3, emissive: 0x500000, emissiveIntensity: 1 });
-    const heart = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 18), heartMat);
-    heart.scale.set(1, 1.25, 0.9); heart.position.y = 1.08; heart.rotation.z = 0.35; heart.castShadow = true; g.add(heart);
-    const pos = heart.geometry.attributes.position;
-    for (let k = 0; k < pos.count; k++) { const n = 1 + (Math.sin(pos.getX(k) * 40) * Math.sin(pos.getY(k) * 33)) * 0.06; pos.setXYZ(k, pos.getX(k) * n, pos.getY(k) * n, pos.getZ(k) * n); }
-    heart.geometry.computeVertexNormals();
-    const vein = new THREE.MeshStandardMaterial({ color: 0x2a0404, roughness: 0.4 });
-    for (let k = 0; k < 5; k++) { const v = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.012, 6, 20, 2 + rng()), vein); v.rotation.set(rng() * 3, rng() * 3, rng() * 3); heart.add(v); }
-    for (let k = 0; k < 3; k++) { const a = cyl(0.03, 0.25, vein, (k - 1) * 0.06, 0.25, 0, heart); a.rotation.z = (k - 1) * 0.4; }
-    const flames = [];
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2, x = Math.cos(a) * 1.35, z = Math.sin(a) * 1.35;
-      cyl(0.035, 0.25, waxMat, x, 0.125, z, g);
-      const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff6a2a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-      f.scale.set(0.12, 0.22, 1); f.position.set(x, 0.33, z); g.add(f); flames.push(f);
+    const sh = map.shrine, room = map.rooms[sh.room];
+    const g = new THREE.Group(); lvl(sh.L).add(g);
+    const stone = new THREE.MeshStandardMaterial({ color: 0x2c2826, roughness: 0.95, map: TX.toTex(TX.rustCanvas()) });
+    const starTex = TX.toTex(TX.pentagramCanvas(), { repeat: false });
+    const starMat = new THREE.MeshStandardMaterial({ map: starTex, emissiveMap: starTex, emissive: 0xff1a08, emissiveIntensity: 0.6, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, roughness: 0.6 });
+    const star = new THREE.Mesh(new THREE.PlaneGeometry(sh.r * 2 + 3, sh.r * 2 + 3), starMat);
+    star.rotation.x = -Math.PI / 2; star.position.set(sh.x, 0.02, sh.z); g.add(star);
+    // centre pit ringed with bones
+    const pit = new THREE.Mesh(new THREE.CircleGeometry(sh.center, 32), new THREE.MeshBasicMaterial({ color: 0x050000 }));
+    pit.rotation.x = -Math.PI / 2; pit.position.set(sh.x, 0.025, sh.z); g.add(pit);
+    for (let k = 0; k < 22; k++) {
+      const a = (k / 22) * Math.PI * 2;
+      const b = cyl(0.025, 0.35, boneMat, sh.x + Math.cos(a) * (sh.center + 0.1), 0.04, sh.z + Math.sin(a) * (sh.center + 0.1), g);
+      b.rotation.set(Math.PI / 2, 0, a + rng());
     }
-    const fire = [];
+    // pillar of red light that wakes up when the star is complete
+    const columnMat = new THREE.MeshBasicMaterial({ color: 0xff1a0a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(sh.center, sh.center * 1.15, WALL_H, 32, 1, true), columnMat);
+    column.position.set(sh.x, WALL_H / 2, sh.z); g.add(column);
+    // five plinths, one per star point
+    const slots = sh.points.map((pt, k) => {
+      const pg = new THREE.Group(); pg.position.set(pt.x, 0, pt.z); g.add(pg);
+      box(0.75, 0.9, 0.75, stone, 0, 0.45, 0, pg);
+      box(0.9, 0.08, 0.9, stone, 0, 0.92, 0, pg);
+      const ember = flameSprite(0xff2a0a, 0.5, 0.5); ember.position.y = 1.0; ember.material.opacity = 0.25; pg.add(ember);
+      for (const sx of [-1, 1]) { const h = 0.2 + rng() * 0.2; cyl(0.03, h, blackWax, sx * 0.3, 0.96 + h / 2, 0.3, pg); const f = flameSprite(0xff3a1a); f.position.set(sx * 0.3, 0.96 + h + 0.05, 0.3); pg.add(f); }
+      world.colliders.push([pt.x - 0.45, pt.z - 0.45, pt.x + 0.45, pt.z + 0.45, sh.L]);
+      return { pg, ember, item: null };
+    });
+    // a ring of black candles around the star
+    const ring = [];
+    for (let k = 0; k < 15; k++) {
+      const a = (k / 15) * Math.PI * 2, r = sh.r + 1.0, h = 0.25 + rng() * 0.35;
+      const x = sh.x + Math.cos(a) * r, z = sh.z + Math.sin(a) * r;
+      cyl(0.04, h, blackWax, x, h / 2, z, g);
+      const f = flameSprite(0xff4a1a, 0.13, 0.24); f.position.set(x, h + 0.08, z); g.add(f); ring.push(f);
+    }
+    // goat-skull altar against the north wall
+    const ax = sh.x, az = room.y * CELL + 0.75;
+    box(2.6, 1.0, 1.0, stone, ax, 0.5, az, g);
+    box(2.9, 0.1, 1.2, stone, ax, 1.03, az, g);
+    const goat = new THREE.Group(); goat.position.set(ax, 1.35, az + 0.1); g.add(goat);
+    const gs = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), boneMat); gs.scale.set(0.8, 1, 1.5); gs.rotation.x = 0.5; goat.add(gs);
+    for (const sx of [-1, 1]) {
+      const pts = []; for (let k = 0; k <= 12; k++) pts.push(new THREE.Vector3(sx * (0.12 + k * 0.03), 0.12 + Math.sin(k * 0.3) * 0.25, -k * 0.035));
+      goat.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.035 - 0.0, 6), new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.6 })));
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), voidMat); eye.position.set(sx * 0.08, 0.05, 0.2); goat.add(eye);
+    }
+    for (let k = 0; k < 7; k++) { const x = ax - 1.2 + k * 0.4, h = 0.2 + rng() * 0.4; cyl(0.035, h, k % 2 ? blackWax : waxMat, x, 1.08 + h / 2, az + 0.35, g); const f = flameSprite(0xff5a1a); f.position.set(x, 1.08 + h + 0.06, az + 0.35); g.add(f); ring.push(f); }
+    world.colliders.push([ax - 1.45, az - 0.6, ax + 1.45, az + 0.6, sh.L]);
+    // piles of skulls in the corners, sack-covered bodies hanging from the ceiling, chains
+    const corners = [[room.x, room.y + room.h - 1], [room.x + room.w - 1, room.y + room.h - 1], [room.x + room.w - 1, room.y], [room.x, room.y]];
+    corners.forEach(([i, j], k) => {
+      const cx = (i + 0.5) * CELL, cz = (j + 0.5) * CELL;
+      if (k < 3) for (let n = 0; n < 9; n++) { const sk = makeItem('skull'); sk.scale.setScalar(0.9 + rng() * 0.4); sk.position.set(cx + (rng() - 0.5) * 1.2, (n > 5 ? 0.2 : 0), cz + (rng() - 0.5) * 1.2); sk.rotation.y = rng() * 6; g.add(sk); }
+    });
+    const sackMat = new THREE.MeshStandardMaterial({ color: 0x3a3226, roughness: 1, map: TX.toTex(TX.fabricCanvas()) });
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x4a3a22, roughness: 1 });
+    const hanging = [];
+    for (let k = 0; k < 4; k++) {
+      const a = k * 1.57 + 0.78, r = sh.r + 2.3;
+      const x = sh.x + Math.cos(a) * r, z = sh.z + Math.sin(a) * r;
+      const piv = new THREE.Group(); piv.position.set(x, WALL_H, z); g.add(piv);
+      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 5), ropeMat); rope.position.y = -0.45; piv.add(rope);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.9, 6, 10), sackMat); body.position.y = -1.45; body.scale.z = 0.8; piv.add(body);
+      const feet = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.18, 4, 6), new THREE.MeshStandardMaterial({ color: 0x6a645a, roughness: 0.8 })); feet.position.y = -2.1; piv.add(feet);
+      hanging.push(piv);
+    }
     for (let k = 0; k < 10; k++) {
-      const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: k % 2 ? 0xff7a20 : 0xffc040, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.9 }));
-      f.visible = false; f.position.set((rng() - 0.5) * 0.4, 1.0 + rng() * 0.4, (rng() - 0.5) * 0.3); g.add(f); fire.push(f);
+      const x = sh.x + (rng() - 0.5) * room.w * CELL * 0.8, z = sh.z + (rng() - 0.5) * room.h * CELL * 0.8, len = 0.6 + rng() * 1.4;
+      for (let n = 0; n < len / 0.09; n++) { const l = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 4, 8), metal); l.position.set(x, WALL_H - n * 0.08, z); l.rotation.y = n % 2 ? Math.PI / 2 : 0; g.add(l); }
     }
-    const src = { x: h.x, y: 1.6, z: h.z, color: new THREE.Color(0xff1a10), base: 3, dist: 8, flicker: false, dead: false, phase: 0, kind: 'heart', level: 1 };
+    // nailed dolls + writing on the walls
+    for (let k = 0; k < 6; k++) {
+      const side = k % 4, t = 0.2 + rng() * 0.6;
+      const x = side < 2 ? room.x * CELL + t * room.w * CELL : side === 2 ? room.x * CELL + 0.12 : (room.x + room.w) * CELL - 0.12;
+      const z = side === 0 ? room.y * CELL + 0.12 : side === 1 ? (room.y + room.h) * CELL - 0.12 : room.y * CELL + t * room.h * CELL;
+      if (side === 0 && Math.abs(x - ax) < 1.8) continue;
+      const d = makeItem('doll'); d.position.set(x, 1.3 + rng() * 0.6, z); d.rotation.z = Math.PI + (rng() - 0.5); g.add(d);
+    }
+    for (const [text, wx, wz, ry] of [['BRING HER TO THE STAR', sh.x, (room.y + room.h) * CELL - 0.02, Math.PI], ['FIVE GIFTS', room.x * CELL + 0.02, sh.z, Math.PI / 2], ['SHE CANNOT LEAVE THE CIRCLE', (room.x + room.w) * CELL - 0.02, sh.z, -Math.PI / 2]]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.6), decalMat(TX.writingCanvas(text)));
+      m.position.set(wx, 1.9, wz); m.rotation.y = ry; g.add(m);
+    }
+    for (let k = 0; k < 6; k++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bloodMats[k % 4]); m.rotation.x = -Math.PI / 2; m.rotation.z = rng() * 6; m.position.set(sh.x + (rng() - 0.5) * 9, 0.015, sh.z + (rng() - 0.5) * 9); g.add(m); }
+    const src = { x: sh.x, y: 2.2 + sh.L * FLOOR_H, z: sh.z, L: sh.L, color: new THREE.Color(0xff1a08), base: 6, dist: 14, flicker: false, candle: true, dead: false, phase: 3, kind: 'shrine', level: 1 };
     world.lightSources.push(src);
-    world.heart = { x: h.x, z: h.z, g, heart, heartMat, flames, fire, src, burning: false, burnT: 0,
-      burn() { this.burning = true; this.src.color.set(0xff7a20); this.src.base = 12; this.src.dist = 12; fire.forEach((f) => (f.visible = true)); } };
+    world.shrine = {
+      ...sh, slots, star, starMat, column, columnMat, ring, hanging, src, active: false, boundT: 0, flash: 0,
+      setPlaced(slot, kind) {
+        const s = slots[slot]; if (!s || s.item) return;
+        s.item = makeItem(kind); s.item.position.y = 0.97; s.pg.add(s.item);
+        s.ember.material.opacity = 0.9; s.ember.scale.set(0.9, 1.4, 1);
+        this.src.base += 2;
+      },
+      setActive() { this.active = true; this.src.base = 16; this.src.dist = 18; },
+      bind() { this.boundT = 0.001; this.flash = 1; this.src.color.set(0xffffff); this.src.base = 40; },
+    };
   }
 
   // ---------- exit door ----------
   const ex = map.exit;
-  const exitG = new THREE.Group(); exitG.position.set(ex.x + 0.02, 0, ex.z); scene.add(exitG);
+  const exitG = new THREE.Group(); exitG.position.set(ex.x + 0.02, 0, ex.z); lvl(0).add(exitG);
   const sig = TX.sigilCanvases(0, 5, false);
   const sigBase = TX.toTex(sig.base, { repeat: false }), sigEm = TX.toTex(sig.em, { repeat: false });
   const doorMat = new THREE.MeshStandardMaterial({ map: sigBase, emissiveMap: sigEm, emissive: 0xffffff, emissiveIntensity: 1.6, metalness: 0.5, roughness: 0.6 });
@@ -534,7 +659,7 @@ export function buildWorld(scene, map) {
   // bright "outside" behind the door
   const outside = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.6), new THREE.MeshBasicMaterial({ color: 0xdfe8ff, fog: false }));
   outside.position.set(-0.01, 1.3, 0); outside.rotation.y = Math.PI / 2; outside.visible = false; exitG.add(outside);
-  const exitSrc = { x: ex.x + 0.8, y: 1.6, z: ex.z, color: new THREE.Color(0xff2a10), base: 2.5, dist: 7, flicker: false, dead: false, phase: 0, kind: 'exit', level: 1 };
+  const exitSrc = { x: ex.x + 0.8, y: 1.6, z: ex.z, L: 0, color: new THREE.Color(0xff2a10), base: 2.5, dist: 7, flicker: false, dead: false, phase: 0, kind: 'exit', level: 1 };
   world.lightSources.push(exitSrc);
   world.exit = {
     leaves, outside, src: exitSrc, mat: doorMat, opened: false, openT: 0,
@@ -553,17 +678,21 @@ export function buildWorld(scene, map) {
   world.update = (dt, t) => {
     for (const tl of world.talismans.values()) {
       if (tl.taken) continue;
-      tl.eff.rotation.y += dt * 0.3;
-      tl.flames.forEach((f, k) => { const s = 0.9 + Math.sin(t * 13 + k * 3) * 0.1 + Math.random() * 0.08; f.scale.set(0.12 * s, 0.2 * s, 1); });
+      tl.item.rotation.y += dt * 0.4;
+      tl.flames.forEach((f, k) => { const q = 0.9 + Math.sin(t * 13 + k * 3) * 0.1 + Math.random() * 0.08; f.scale.set(0.12 * q, 0.2 * q, 1); });
+      if (tl.item.userData.flame) tl.item.userData.flame.scale.set(0.12, 0.22 + Math.random() * 0.05, 1);
       tl.halo.material.opacity = 0.3 + Math.sin(t * 7) * 0.05;
     }
-    { const H = world.heart; const beat = (t * 1.1) % 1; const pulse = Math.exp(-beat * 14) + Math.exp(-Math.max(0, beat - 0.22) * 14) * (beat > 0.22 ? 0.7 : 0);
-      const sc = H.burning ? 1 - Math.min(0.6, H.burnT * 0.08) : 1 + pulse * 0.12;
-      if (H.burning) H.burnT += dt;
-      H.heart.scale.set(sc, sc * 1.25, sc * 0.9); H.heartMat.emissiveIntensity = H.burning ? 2.5 : 0.6 + pulse * 2;
-      H.src.level = H.burning ? 0.8 + Math.random() * 0.4 : 0.5 + pulse;
-      H.flames.forEach((f, k) => { const q = 0.9 + Math.sin(t * 13 + k) * 0.1; f.scale.set(0.12 * q, 0.22 * q, 1); });
-      if (H.burning) H.fire.forEach((f, k) => { const q = 0.5 + Math.random() * 0.7; f.scale.set(0.5 * q, 0.9 * q, 1); f.position.y = 1.0 + ((t * 0.8 + k * 0.1) % 0.8); f.material.opacity = 0.9 - ((t * 0.8 + k * 0.1) % 0.8); });
+    {
+      const S = world.shrine;
+      S.ring.forEach((f, k) => { const q = 0.85 + Math.sin(t * 11 + k) * 0.12 + Math.random() * 0.08; f.scale.set(0.13 * q, 0.24 * q, 1); });
+      S.hanging.forEach((h, k) => { h.rotation.z = Math.sin(t * 0.6 + k) * 0.06; h.rotation.y += dt * 0.05 * (k % 2 ? 1 : -1); });
+      const placed = S.slots.filter((s) => s.item).length;
+      S.starMat.emissiveIntensity = (S.active ? 2.6 + Math.sin(t * 6) * 0.8 : 0.5 + placed * 0.3 + Math.sin(t * 2) * 0.15) * (S.boundT ? 2 : 1);
+      S.src.level = S.active ? 0.85 + Math.random() * 0.3 : 0.7 + Math.sin(t * 3) * 0.15;
+      S.columnMat.opacity += ((S.active ? 0.16 + Math.sin(t * 9) * 0.05 : 0) + S.flash * 0.6 - S.columnMat.opacity) * Math.min(1, dt * 3);
+      S.slots.forEach((s) => { if (s.item) s.item.rotation.y += dt * 0.6; });
+      if (S.boundT) { S.boundT += dt; S.flash = Math.max(0, S.flash - dt * 0.4); }
     }
     for (const c of world.souls.values()) if (!c.taken) { const q = 0.85 + Math.sin(t * 9 + c.x) * 0.1 + Math.random() * 0.08; c.flame.scale.set(0.14 * q, 0.26 * q, 1); c.sprite.material.opacity = 0.3 + Math.sin(t * 2 + c.z) * 0.08; }
     for (const b of world.bells.values()) if (!b.taken) { b.sprite.material.opacity = 0.25 + Math.sin(t * 2.5 + b.x) * 0.12; b.group.rotation.z = Math.sin(t * 1.7 + b.z) * 0.04; }

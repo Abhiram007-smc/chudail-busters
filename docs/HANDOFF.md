@@ -99,7 +99,7 @@ Clients render remote things 130 ms in the past and interpolate (`INTERP_MS` in 
 
 ---
 
-## 7. WORK IN PROGRESS: branch `feature/multifloor-shrine`
+## 7. Multi-floor house + shrine finale + difficulty (merged into `main`)
 
 Goal requested by the owner:
 1. **Bigger house with multiple floors**: basement, ground floor, upper floor, connected by staircases.
@@ -144,7 +144,14 @@ Quick verification snippet (passes):
 node -e "import('./shared/map.js').then(m=>{const x=m.generateMap(5);console.log(x.stairs.length, x.talismans.map(t=>t.kind+'@'+t.L));const s=x.stairs[0];const[dx,dz]=s.d;const bx=(s.c2[0]+.5)*3+dx*1.5,bz=(s.c2[1]+.5)*3+dz*1.5;console.log(m.stairTransition(x,s.L,bx-dx*.35,bz-dz*.35))})"
 ```
 
-### 7.2 TODO, server.js (do this first)
+### 7.2 DONE, server.js (verified with a bot on Hard: monster crossed floors 1→0→-1, 5 items placed, lure → bound → escape → win)
+
+Implemented as specified below (`followPath`/`moveEntity` helpers handle multi-floor steering + `stairTransition`).
+Snapshot rows now end with `L` (players index 13, monster index 8, crawler index 5). New events: `drop`, `placed`,
+`bound`, `stage:'lure'|'escape'`. New messages: `{t:'place', slot}`, `{t:'difficulty', key}`. `start` includes
+`difficulty, placed, progress, moved` and per-player `items, L`.
+
+Original spec, kept for reference:
 
 1. Imports: replace `bfsPath` with `bfsPath3`, add `stairTransition, heightAt, DIFFICULTY, ITEM_KINDS`.
 2. Players get `L` (spawn `L=0`). `{t:'s'}` must carry `L`; store it. Add `L` to the snapshot row (append at the end
@@ -178,7 +185,9 @@ node -e "import('./shared/map.js').then(m=>{const x=m.generateMap(5);console.log
    `items`/`revive` by filtering map lists deterministically (e.g. keep the first `round(n*mult)` ids) on BOTH
    server and client (send the kept ids in `startMsg`).
 
-### 7.3 TODO, public/world.js
+### 7.3 DONE, public/world.js (levels in `world.levelGroups[L]`, stairs with steps + handrails, ritual item models via `world.makeItem(kind)`, the shrine with `setPlaced/setActive/bind`, colliders carry `L` as 5th element)
+
+Original spec:
 
 1. Build every level: loop `LEVELS`, offset all geometry by `y = L*FLOOR_H`. Skip floor quads for type-4 cells
    (stairwell holes) and ceiling quads for type-3 cells (ramps). Walls: build walls where a walkable cell (1,2,3)
@@ -208,7 +217,9 @@ node -e "import('./shared/map.js').then(m=>{const x=m.generateMap(5);console.log
    on the plinth.
 7. Remove the ROOM 41 heart (`world.heart`) and exit sigil runes text that mention bones if needed.
 
-### 7.4 TODO, public/main.js
+### 7.4 DONE, public/main.js (player `L`, `heightAt` camera, `stairTransition`, per-floor interactions, light pool + remote flashlights per floor, `updateLevels()` floor visibility, carry/place/drop/bound events, objectives + briefing, lobby difficulty buttons, floor tag in HUD)
+
+Original spec:
 
 1. Player state gets `L` (start 0) and uses `heightAt(map, L, x, z)` for camera height (+eye). After
    `resolveCircle(map, L, …)` call `stairTransition` and apply. Send `L` in `{t:'s'}`.
@@ -228,7 +239,27 @@ node -e "import('./shared/map.js').then(m=>{const x=m.generateMap(5);console.log
    `drop` (show item at body).
 8. Lobby: difficulty selector (4 buttons) visible to all; send `{t:'difficulty', key}`; show current difficulty.
 
-### 7.5 Acceptance checks
+### 7.5 Status of acceptance checks
+
+Verified:
+- Server end-to-end with a bot (`hard`): monster crossed floors 1→0→-1, 5 items placed, lure → bound → escape → win.
+- In the browser (port 3002 WIP server): walking up a staircase smoothly raises the camera 0→3 m and switches to the
+  upper floor; walking back down returns to the ground floor; floor tag updates; basement shrine renders (glowing
+  pentagram, plinths, candles, chains); picking up an item and placing it on a star point works (plinth shows the
+  item, star icon lights, messages); difficulty chosen in the lobby reaches the game; 60 FPS.
+
+- Lure rule (fixed after testing): players standing inside the burning star cannot be killed, and while she chases
+  someone inside it she is dragged to the centre (`inStar` in the monster steering, server.js). Bot tests standing at the
+  centre and at the edge both end `bound → escape → END win=true`.
+- In the browser: all 5 items picked up and placed with the real controls, stage `lure` + active shrine (red column, 5
+  stars lit); death switches to spectating a teammate (briefing overlay now hidden).
+
+Still worth a human playthrough (not blocking):
+- The `bound` cinematic (monster sinking, flash) seen from inside the star.
+- Dropped items (`drop` event) appearing at a dead player's body on the right floor.
+- Crawler on upper/basement floors; spectator drone above the roof (all floors visible).
+
+Original checklist:
 
 - A bot can walk from the foyer up a staircase (L 0→1) and down to the basement (L 0→-1) using only
   `{t:'s'}` updates driven by `bfsPath3` + `stairTransition` (write `bot` in a scratch file).

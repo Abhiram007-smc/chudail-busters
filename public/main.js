@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { CELL, WALL_H, TALISMANS, generateMap, resolveCircle, pushOutBox, lineOfSight, isWall } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
@@ -73,7 +73,7 @@ const S = {
   phase: 'menu', myId: 0, myColor: '#fff', name: '', myChar: (() => { try { return localStorage.getItem('hm_char') || ''; } catch { return ''; } })(),
   lobby: [], players: new Map(), map: null, world: null, scene: null, composer: null, post: null,
   monster: null, ghost: null, mon: null,
-  me: null, collected: 0, exitOpen: false,
+  me: null, progress: 0, placed: [null, null, null, null, null], exitOpen: false, difficulty: 'normal', camL: 0,
   fear: 0, red: 0, black: 0, shake: 0,
   flickUntil: 0, lightsOutUntil: 0, timers: [], nextScare: 0, ghostState: null,
   tune: { fl: 135, exposure: 1.45, hemi: 0.9, fog: 0.058, bulb: 1.6, remote: 60 },
@@ -99,7 +99,7 @@ function handle(m) {
     case 'welcome': S.myId = m.id; S.myColor = m.color; break;
     case 'full': $('joinBtn').disabled = false; $('joinBtn').textContent = 'Asylum full (6/6). Retry'; ws.close(); S.phase = 'menu'; break;
     case 'lobby':
-      S.lobby = m.players; renderLobby();
+      S.lobby = m.players; if (m.difficulty) S.difficulty = m.difficulty; renderLobby();
       if (m.publicUrl && m.publicUrl !== S.publicUrl) { S.publicUrl = m.publicUrl; loadShare(); }
       if (m.phase === 'lobby') {
         if (S.phase !== 'lobby') { leaveGame(); S.phase = 'lobby'; showScreen('lobby'); }
@@ -129,6 +129,10 @@ function renderLobby() {
   $('pcount').textContent = `${S.lobby.length}/6`;
   const mine = S.lobby.find((p) => p.id === S.myId);
   if (mine && mine.char) { S.myChar = mine.char; ensureChar(mine.char); }
+  const dEl = $('diff');
+  const tips = { easy: 'slower, half-blind, plenty of supplies, no crawler', normal: 'the way it was meant to be', hard: 'faster, sharper ears, fewer supplies', nightmare: 'she hears everything. good luck.' };
+  dEl.innerHTML = Object.entries(DIFFICULTY).map(([k, d]) => `<button data-k="${k}" class="${k === S.difficulty ? 'on' : ''}">${d.label}</button>`).join('') + `<div class="tip">${tips[S.difficulty] || ''}</div>`;
+  dEl.querySelectorAll('button').forEach((b) => { b.disabled = !!S.spectator; b.onclick = () => { send({ t: 'difficulty', key: b.dataset.k }); audio.click(); }; });
   $('startBtn').style.display = S.spectator ? 'none' : '';
   $('chars').style.display = S.spectator ? 'none' : '';
   if (S.spectator) { $('pcount').textContent = `${S.lobby.length}/6 · you are a hidden spectator`; return; }
@@ -218,7 +222,8 @@ addEventListener('keydown', (e) => {
   if ((e.code === 'KeyE' || e.code === 'Escape') && S.reading) { closeNote(); return; }
   if (e.code === 'KeyE' && S.me?.hidden) { send({ t: 'unhide' }); return; }
   if (e.code === 'KeyE' && S.prompt && S.prompt.note) { openNote(S.prompt.id); S.prompt = null; return; }
-  if (e.code === 'KeyE' && S.prompt && !S.prompt.burn && !S.prompt.revive) {
+  if (e.code === 'KeyE' && S.prompt && S.prompt.place) { send({ t: 'place', slot: S.prompt.slot }); S.prompt = null; return; }
+  if (e.code === 'KeyE' && S.prompt && !S.prompt.revive) {
     if (S.prompt.hide) send({ t: 'hide', id: S.prompt.id }); else send({ t: 'pickup', id: S.prompt.id });
     S.prompt = null;
   }
@@ -231,7 +236,6 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyQ' && S.me?.alive && !S.me.escaped && !S.me.hidden) {
     if (S.me.bells > 0) send({ t: 'bell' }); else message('You have no spirit bells.');
   }
-  if (e.code === 'KeyE' && S.prompt && S.prompt.burn && !S.burn) { S.burn = { start: performance.now() }; send({ t: 'burnStart' }); audio.whisper(0, 0.3, 1.5); }
   if (e.code === 'KeyE' && S.prompt && S.prompt.revive && !S.reviving) { S.reviving = { start: performance.now(), id: S.prompt.target }; audio.whisper(0, 0.25, 1.2); }
   if (e.code === 'Tab') e.preventDefault();
 });
@@ -328,7 +332,7 @@ function buildGame(m) {
   S.crawler = createCrawler(WALL_H); S.crawler.visible = false; scene.add(S.crawler);
   S.crawl = { x: 0, z: 0, yaw: 0, tx: 0, tz: 0, tyaw: 0, state: 'gone', target: 0, step: 0, speed: 0, skitter: 0 };
   S.ghost = createMonster({ ghost: true }); S.ghost.visible = false; scene.add(S.ghost);
-  S.mon = { x: map.monsterSpawn.x, z: map.monsterSpawn.z, yaw: 0, tx: map.monsterSpawn.x, tz: map.monsterSpawn.z, tyaw: 0, state: 'dormant', target: 0, speed: 0, vis: 0, step: 0, lit: false };
+  S.mon = { L: map.monsterSpawn.L, x: map.monsterSpawn.x, z: map.monsterSpawn.z, yaw: 0, tx: map.monsterSpawn.x, tz: map.monsterSpawn.z, tyaw: 0, state: 'dormant', target: 0, speed: 0, vis: 0, step: 0, lit: false };
   S.monster.position.set(S.mon.x, 0, S.mon.z);
 
   S.players.clear();
@@ -345,10 +349,14 @@ function buildGame(m) {
     addXray(S.monster, 0xff2a2a); addXray(S.crawler, 0xff5a20);
     S.droneFollow = null;
   }
-  S.collected = m.collected; S.exitOpen = m.exitOpen; S.stage = m.stage || 'effigies'; S.burn = null;
-  if (S.stage === 'escape') S.world.heart.burn();
+  S.progress = m.progress || 0; S.exitOpen = m.exitOpen; S.stage = m.stage || 'items'; S.difficulty = m.difficulty || 'normal';
+  S.placed = m.placed || [null, null, null, null, null];
+  S.me.L = mine.L ?? 0; S.me.items = (mine.items || []).slice();
   for (const id of m.taken) takeItem(id);
-  S.world.exit.setProgress(S.collected, S.exitOpen);
+  for (const mv of m.moved || []) { const tl = S.world.talismans.get(mv.id); if (tl && !tl.taken) tl.moveTo(mv.x, mv.z, mv.L); }
+  S.placed.forEach((id, slot) => { if (id) { takeItem(id); S.world.shrine.setPlaced(slot, S.world.talismans.get(id).kind); } });
+  if (S.stage !== 'items') S.world.shrine.setActive();
+  S.world.exit.setProgress(S.placed.filter(Boolean).length, S.exitOpen);
   buildIcons();
 
   S.composer = new EffectComposer(renderer);
@@ -395,7 +403,7 @@ function warmUp(scene) {
 function addPlayer(p) {
   if (p.id === S.myId || S.players.has(p.id)) return;
   const avatar = createAvatar(p.name, p.color, p.char);
-  avatar.position.set(p.x, 0, p.z);
+  avatar.position.set(p.x, heightAt(S.map, p.L ?? 0, p.x, p.z), p.z);
   S.scene.add(avatar);
   if (p.char && !charLoaded(p.char)) ensureChar(p.char).then(() => {
     const r = S.players.get(p.id); if (!r || !S.scene) return;
@@ -403,7 +411,7 @@ function addPlayer(p) {
     fresh.position.copy(r.avatar.position); fresh.rotation.copy(r.avatar.rotation);
     S.scene.remove(r.avatar); S.scene.add(fresh); r.avatar = fresh; r.deadShown = false;
   });
-  const r = { id: p.id, name: p.name, color: p.color, char: p.char, alive: p.alive !== false, escaped: !!p.escaped, avatar, x: p.x, z: p.z, yaw: 0, pitch: 0, tx: p.x, tz: p.z, tyaw: 0, tpitch: 0, fl: true, cr: false, mv: false, sp: false, step: 0, deadShown: false };
+  const r = { L: p.L ?? 0, id: p.id, name: p.name, color: p.color, char: p.char, alive: p.alive !== false, escaped: !!p.escaped, avatar, x: p.x, z: p.z, yaw: 0, pitch: 0, tx: p.x, tz: p.z, tyaw: 0, tpitch: 0, fl: true, cr: false, mv: false, sp: false, step: 0, deadShown: false };
   if (!r.alive) { avatar.userData.setDead(); r.deadShown = true; }
   if (r.escaped) { avatar.userData.setShown(false); avatar.userData.label.visible = false; }
   S.players.set(p.id, r);
@@ -422,7 +430,8 @@ function leaveGame() {
 
 function buildIcons() {
   const el = $('icons'); el.innerHTML = '';
-  for (let k = 0; k < TALISMANS; k++) { const d = document.createElement('div'); d.className = 'ic' + (k < S.collected ? ' got' : ''); d.textContent = '✝'; el.appendChild(d); }
+  const n = S.placed.filter(Boolean).length;
+  for (let k = 0; k < TALISMANS; k++) { const d = document.createElement('div'); d.className = 'ic' + (k < n ? ' got' : ''); d.textContent = '⛧'; el.appendChild(d); }
 }
 
 function takeItem(id) {
@@ -457,27 +466,32 @@ function sampleBuf(buf, rt) {
 function applySnap(m) {
   if (S.phase !== 'playing') return;
   for (const a of m.p) {
-    const [id, x, z, yaw, pitch, fl, cr, alive, esc, mv, sp, hid, sn] = a;
+    const [id, x, z, yaw, pitch, fl, cr, alive, esc, mv, sp, hid, sn, L] = a;
     if (id === S.myId) continue;
     let r = S.players.get(id);
     if (!r) continue;
     const nowT = performance.now();
     r.buf = r.buf || [];
-    if (r.buf.length && Math.hypot(r.buf[r.buf.length - 1].x - x, r.buf[r.buf.length - 1].z - z) > 6) r.buf.length = 0;
+    if ((r.buf.length && Math.hypot(r.buf[r.buf.length - 1].x - x, r.buf[r.buf.length - 1].z - z) > 6) || r.L !== L) r.buf.length = 0;
+    r.L = L ?? 0;
     pushSnap(r.buf, { t: nowT, x, z, yaw, pitch });
     r.tx = x; r.tz = z; r.tyaw = yaw; r.tpitch = pitch; r.fl = !!fl; r.cr = !!cr; r.mv = !!mv; r.sp = !!sp; r.sn = !!sn;
     r.escaped = !!esc; r.hid = hid || null;
     if (!alive && r.alive) { r.alive = false; }
   }
   if (m.m) {
-    const [x, z, yaw, state, target, speed, lit, lunge] = m.m;
+    const [x, z, yaw, state, target, speed, lit, lunge, L] = m.m;
+    if (S.mon.L !== L && S.mon.buf) S.mon.buf.length = 0;
+    S.mon.L = L ?? 0;
     Object.assign(S.mon, { tx: x, tz: z, tyaw: yaw, state, target, speed, lit: !!lit, lunge: !!lunge });
     const mb = (S.mon.buf = S.mon.buf || []);
     if (mb.length && Math.hypot(mb[mb.length - 1].x - x, mb[mb.length - 1].z - z) > 6) mb.length = 0;
     pushSnap(mb, { t: performance.now(), x, z, yaw, pitch: 0 });
   }
   if (m.c) {
-    const [x, z, yaw, state, target] = m.c;
+    const [x, z, yaw, state, target, L] = m.c;
+    if (S.crawl.L !== L) S.crawl.buf = [];
+    S.crawl.L = L ?? 0;
     if (S.crawl.state === 'gone') { S.crawl.x = x; S.crawl.z = z; S.crawl.buf = []; }
     pushSnap((S.crawl.buf = S.crawl.buf || []), { t: performance.now(), x, z, yaw, pitch: 0 });
     Object.assign(S.crawl, { tx: x, tz: z, tyaw: yaw, state, target });
@@ -493,17 +507,19 @@ function onEvent(m) {
     case 'pickup': {
       const kind = takeItem(m.id);
       if (kind === 't') {
-        S.collected = m.collected; buildIcons(); renderClues(); setObjective();
-        S.world.exit.setProgress(S.collected, m.exitOpen);
+        const tl = S.world.talismans.get(m.id);
+        S.progress = m.progress;
         if (m.by === S.myId) {
+          S.me.items = m.items;
           audio.bell(); audio.stinger(0.35); S.red = 0.7; S.shake = 0.4;
-          message(`You took an effigy (${S.collected}/${TALISMANS})`);
-          setTimeout(() => message('It knows where you are.', 'red'), 900);
+          message(`You took the ${tl.name}. Bring it to the star in the basement.`);
+          setTimeout(() => message('She knows where you are.', 'red'), 900);
           setTimeout(() => audio.whisper(rnd(-0.6, 0.6), 0.35, 2.2), 600);
         } else {
           audio.bell();
-          message(`${nameOf(m.by)} found an effigy (${S.collected}/${TALISMANS})`);
+          message(`${nameOf(m.by)} found the ${tl.name}`);
         }
+        renderClues(); setObjective();
       } else if (kind === 'r' && m.by === S.myId) {
         S.me.revives = m.revives; audio.holyBell(S.me.x, S.me.z); message(`Aatma candle (${m.revives}). Hold E over a fallen friend to bring them back.`);
       } else if (kind === 'w' && m.by === S.myId) {
@@ -527,7 +543,7 @@ function onEvent(m) {
       const r = S.players.get(m.id);
       if (r) { r.alive = false; r.tx = m.x; r.tz = m.z; }
       audio.distantScream(m.x, m.z);
-      addBlood(m.x, m.z);
+      addBlood(m.x, m.z, m.L ?? 0);
       message(`${nameOf(m.id)} was taken.`, 'red');
       break;
     }
@@ -567,7 +583,7 @@ function onEvent(m) {
       if (m.by === S.myId) { S.me.revives = m.revives; S.reviving = null; }
       audio.holyBell(m.x, m.z); audio.whisper(0, 0.3, 2);
       if (m.id === S.myId) {
-        Object.assign(S.me, { alive: true, x: m.x, z: m.z, hidden: null, battery: Math.max(S.me.battery, 50), fl: true, stamina: 100 });
+        Object.assign(S.me, { L: m.L ?? S.me.L, alive: true, x: m.x, z: m.z, hidden: null, battery: Math.max(S.me.battery, 50), fl: true, stamina: 100 });
         S.spectating = null; S.jumpscare = false; S.red = 0; S.black = 0.6;
         $('spectate').style.display = 'none'; $('death').classList.remove('show');
         showScreen(document.pointerLockElement === canvas ? '' : 'resume');
@@ -576,7 +592,7 @@ function onEvent(m) {
         const r = S.players.get(m.id);
         if (r) {
           S.scene.remove(r.avatar);
-          r.avatar = createAvatar(r.name, r.color, r.char); r.avatar.position.set(m.x, 0, m.z); S.scene.add(r.avatar);
+          r.avatar = createAvatar(r.name, r.color, r.char); r.L = m.L ?? r.L; r.avatar.position.set(m.x, heightAt(S.map, r.L, m.x, m.z), m.z); S.scene.add(r.avatar);
           r.alive = true; r.deadShown = false; r.buf = []; r.x = r.tx = m.x; r.z = r.tz = m.z;
         }
         message(`${nameOf(m.id)} is back from the dead!`);
@@ -594,22 +610,45 @@ function onEvent(m) {
     }
     case 'stage': {
       S.stage = m.stage;
-      if (m.stage === 'heart') {
-        audio.rumble(0.7, 4); audio.whisper(0, 0.45, 3);
-        message('The bones whisper as one…', 'red');
-        setTimeout(() => message('"Her heart still beats in ROOM 41."', 'red'), 2200);
+      if (m.stage === 'lure') {
+        S.world.shrine.setActive();
+        audio.rumble(1, 5); audio.whisper(0, 0.5, 3); S.shake = 1; S.red = 0.6;
+        message('THE STAR IS AWAKE', 'red');
+        setTimeout(() => message('Bring her to it. She cannot touch you inside the star.', 'red'), 2000);
+        for (const b of S.world.bulbs) { b.color.set(0xff2010); b.flicker = true; }
       } else if (m.stage === 'escape') {
-        S.exitOpen = true; S.burn = null;
-        S.world.heart.burn(); S.world.exit.setProgress(TALISMANS, true);
-        audio.scream(); audio.rumble(1, 6); S.shake = 1.5; S.red = 1;
-        message(`${m.by === S.myId ? 'You' : nameOf(m.by)} burned her heart!`, 'red');
-        setTimeout(() => message('THE FOYER DOOR IS OPEN. RUN!', 'red'), 1800);
-        for (const b of S.world.bulbs) { b.color.set(0xff2010); b.dead = false; b.flicker = true; }
+        S.exitOpen = true; S.world.exit.setProgress(TALISMANS, true);
+        setTimeout(() => message('THE FRONT DOOR IS OPEN. GET OUT!', 'red'), 2500);
       }
       setObjective(); renderClues();
       break;
     }
-    case 'burnStart': if (m.by !== S.myId) message(`${nameOf(m.by)} is burning the heart. Protect them!`, 'red'); else message('She can feel it. She is coming.', 'red'); break;
+    case 'placed': {
+      const tl = S.world.talismans.get(m.id);
+      S.placed[m.slot] = m.id; takeItem(m.id);
+      S.world.shrine.setPlaced(m.slot, tl.kind);
+      if (m.by === S.myId) S.me.items = m.items;
+      audio.bell(); audio.stinger(0.3); audio.whisper(rnd(-0.5, 0.5), 0.3, 1.6);
+      message(`${nameOf(m.by)} placed the ${tl.name} on the star (${m.count}/${TALISMANS})`);
+      S.world.exit.setProgress(m.count, false);
+      buildIcons(); setObjective(); renderClues();
+      break;
+    }
+    case 'drop': {
+      const tl = S.world.talismans.get(m.id);
+      if (tl) { tl.taken = false; tl.group.visible = true; tl.moveTo(m.x, m.z, m.L); }
+      if (m.by === S.myId && S.me) S.me.items = [];
+      message(`The ${tl ? tl.name : 'item'} was dropped where ${nameOf(m.by)} fell.`);
+      setObjective();
+      break;
+    }
+    case 'bound': {
+      S.mon.boundT = 0.001;
+      S.world.shrine.bind();
+      audio.scream(); audio.rumble(1, 7); audio.stinger(1); S.shake = 2; S.red = 1; S.whiteOut = 0.6;
+      message('SHE IS BOUND', 'red');
+      break;
+    }
     case 'crawlerDrop': {
       audio.screech(m.x, m.z, m.id === S.myId ? 1 : 0.6); audio.skitter(m.x, m.z, 1.2);
       if (m.id === S.myId) { audio.stinger(0.8); S.shake = 1; S.red = 0.6; message('ABOVE YOU', 'red'); }
@@ -637,10 +676,10 @@ function onEvent(m) {
   }
 }
 
-function addBlood(x, z) {
+function addBlood(x, z, L = 0) {
   const mats = S.world.bloodMats;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), mats[Math.floor(Math.random() * mats.length)]);
-  mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = Math.random() * 6; mesh.position.set(x, 0.014, z); S.scene.add(mesh);
+  mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = Math.random() * 6; mesh.position.set(x, 0.014, z); S.world.levelGroups[L].add(mesh);
 }
 
 function onEnd(m) {
@@ -656,14 +695,16 @@ function onEnd(m) {
 }
 
 function setObjective() {
-  const hr = S.map.rooms[S.map.heart.room];
-  const st = S.stage;
+  const st = S.stage, placedN = S.placed.filter(Boolean).length;
+  const carried = (S.me?.items || []).map((id) => S.world.talismans.get(id)?.name).filter(Boolean);
   const item = (done, active, text) => `<div class="obj ${done ? 'done' : active ? 'active' : ''}">${done ? '☑' : '☐'} ${text}</div>`;
   $('objective').innerHTML =
     '<div class="h">OBJECTIVES</div>' +
-    item(st !== 'effigies', st === 'effigies', `Find the 5 bone effigies <span class="n">(${S.collected}/${TALISMANS})</span>`) +
-    item(st === 'escape', st === 'heart', st === 'effigies' ? 'Burn her heart <span class="n">(location unknown)</span>' : `Burn her heart in ROOM 41 <span class="n">(${hr.wing})</span>`) +
-    item(false, st === 'escape', 'Escape through the foyer door');
+    item(S.progress >= TALISMANS || st !== 'items', st === 'items' && S.progress < TALISMANS, `Find the 5 ritual items <span class="n">(${S.progress}/${TALISMANS})</span>`) +
+    item(st !== 'items', st === 'items', `Place them on the star in the basement shrine <span class="n">(${placedN}/${TALISMANS})</span>`) +
+    item(st === 'escape', st === 'lure', 'Lure the Chudail into the centre of the star') +
+    item(false, st === 'escape', 'Escape through the front door (ground floor)') +
+    (carried.length ? `<div class="n" style="margin-top:6px;color:#ffb070">Carrying: ${carried.map(esc).join(', ')}</div>` : '');
 }
 
 // briefing shown on the "click to enter" screen at the start of a game
@@ -671,17 +712,18 @@ function showBriefing() {
   $('brief').innerHTML = `
     <div class="bh">YOUR OBJECTIVES</div>
     <ol>
-      <li><b>Find the 5 bone effigies.</b> Notes left by the staff tell you which room and wing they are in.</li>
-      <li><b>Burn her heart in ROOM 41.</b> After all five are taken, hold <kbd>E</kbd> at the altar. She will come for you.</li>
-      <li><b>Escape through the foyer door</b> behind you. Anyone who gets out wins it for the team.</li>
+      <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff's notes say where.</li>
+      <li><b>Carry them down to the shrine in the basement</b> and place one on each point of the star. If you die carrying one, you drop it.</li>
+      <li><b>Lure the Chudail into the centre of the star.</b> When it burns she cannot touch anyone standing inside it. Make her come to you; when she steps into the middle she is bound.</li>
+      <li><b>Escape through the front door</b> on the ground floor.</li>
     </ol>
-    <div class="bh">TO SURVIVE</div>
+    <div class="bh">TO SURVIVE · ${esc((DIFFICULTY[S.difficulty] || DIFFICULTY.normal).label.toUpperCase())}</div>
     <ul>
       <li><span style="color:#ffd27a">Spirit bells</span>: press <kbd>Q</kbd> to freeze her for 6 seconds.</li>
       <li><span style="color:#9fd8ff">Aatma candles</span>: hold <kbd>E</kbd> over a fallen friend to bring them back.</li>
-      <li>Hide in lockers and wardrobes, but never while she is watching.</li>
+      <li>Hide in lockers, wardrobes and under beds, but never while she is watching.</li>
       <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent.</li>
-      <li>Something lives on the ceiling once the first bone is taken. Look up.</li>
+      <li>Something lives on the ceiling once the first item is taken. Look up.</li>
     </ul>`;
   $('brief').style.display = 'block';
 }
@@ -699,12 +741,11 @@ function openNote(id) {
 function closeNote() { S.reading = null; $('note').classList.remove('show'); audio.paper?.(); }
 function renderClues() {
   const el = $('clues');
-  if (!S.world || (!S.clues.size && S.stage !== 'heart')) { el.innerHTML = ''; return; }
+  if (!S.world || !S.clues.size) { el.innerHTML = ''; return; }
   const rows = [...S.clues].map((id) => {
     const n = S.world.notes.get(id); const t = S.world.talismans.get(n.clue);
-    return `<div class="${t && t.taken ? 'done' : ''}">• ${esc(n.about)}</div>`;
+    return `<div class="${t && (t.taken || S.placed.includes(n.clue)) ? 'done' : ''}">• ${esc(n.about)}</div>`;
   });
-  if (S.stage === 'heart') rows.push(`<div style="color:#ff6a50">• ROOM 41, ${esc(S.map.rooms[S.map.heart.room].wing)}: her heart</div>`);
   el.innerHTML = '<div class="h">CLUES</div>' + rows.join('');
 }
 
@@ -737,14 +778,14 @@ function findSpotAhead(minD, maxD) {
   const f = camForward(), cx = camera.position.x, cz = camera.position.z;
   for (let d = maxD; d >= minD; d -= 0.5) {
     const x = cx + f.x * d, z = cz + f.z * d;
-    if (!isWall(S.map, Math.floor(x / CELL), Math.floor(z / CELL)) && lineOfSight(S.map, cx, cz, x, z)) return { x, z, d };
+    if (!isWall(S.map, S.me.L, Math.floor(x / CELL), Math.floor(z / CELL)) && lineOfSight(S.map, S.me.L, cx, cz, x, z)) return { x, z, d };
   }
   return null;
 }
 
 function showGhost(x, z, until, kind) {
   const g = S.ghost;
-  g.position.set(x, 0, z);
+  g.position.set(x, heightAt(S.map, S.me.L, x, z), z);
   g.rotation.y = Math.atan2(-(camera.position.x - x), -(camera.position.z - z));
   g.visible = true;
   S.ghostState = { until, seen: false, kind, lookT: 0 };
@@ -753,7 +794,7 @@ function hideGhost() { S.ghost.visible = false; S.ghostState = null; }
 
 function runScare(t, forced) {
   const options = ['apparition', 'apparition', 'footsteps', 'whisper', 'blackout', 'blackout', 'bulb', 'slam'];
-  if (S.collected >= 2) options.push('faceflash', 'blackout');
+  if (S.progress >= 2) options.push('faceflash', 'blackout');
   let type = forced || options[Math.floor(Math.random() * options.length)];
   const monD = Math.hypot(S.mon.x - S.me.x, S.mon.z - S.me.z);
   if (type === 'apparition' && monD < 18) type = 'whisper';
@@ -813,7 +854,7 @@ function updateScares(dt, t) {
   if (!S.me.alive || S.me.escaped) return;
   if (t > S.nextScare) {
     if (S.mon.state === 'chase' && S.mon.target === S.myId) S.nextScare = t + 8;
-    else { runScare(t); S.nextScare = t + rnd(22, 45) - S.collected * 2.5; }
+    else { runScare(t); S.nextScare = t + rnd(22, 45) - S.progress * 2.5; }
   }
   const gs = S.ghostState;
   if (gs) {
@@ -877,6 +918,7 @@ function startSpectate() {
   if (S.phase !== 'playing') return;
   const list = aliveOthers();
   S.spectating = list.length ? list[0].id : -1;
+  $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME';
   $('spectate').style.display = 'block';
   if (document.pointerLockElement !== canvas) showScreen('resume'); else showScreen('');
 }
@@ -888,20 +930,21 @@ function nextSpectate() {
 }
 
 // ---------------- per-frame updates ----------------
-function surfaceAt(x, z) { return S.map.grid[Math.floor(z / CELL) * S.map.W + Math.floor(x / CELL)] === 2 ? 'tile' : 'wood'; }
+function surfaceAt(x, z, L = 0) { return S.map.grid[L][Math.floor(z / CELL) * S.map.W + Math.floor(x / CELL)] === 2 ? 'tile' : 'wood'; }
 
 function updateHidden(dt, t) {
   const me = S.me, h = S.world.hides.get(me.hidden);
   me.fl = false; me.moving = false; me.sprint = false;
   me.stamina = Math.min(100, me.stamina + dt * 15);
-  if (h.type === 'bed') camera.position.set(h.x + h.fx * 0.35, 0.26, h.z + h.fz * 0.35);
-  else camera.position.set(h.x - h.fx * 0.08, 1.6, h.z - h.fz * 0.08);
+  const base = me.L * FLOOR_H;
+  if (h.type === 'bed') camera.position.set(h.x + h.fx * 0.35, base + 0.26, h.z + h.fz * 0.35);
+  else camera.position.set(h.x - h.fx * 0.08, base + 1.6, h.z - h.fz * 0.08);
   camera.rotation.set(me.pitch + (Math.random() - 0.5) * S.shake * 0.04, me.yaw, 0);
   // you hold your breath when it is close
   const d = Math.hypot(S.mon.x - h.x, S.mon.z - h.z);
   me.breathT -= dt;
   if (me.breathT <= 0) { me.breathT = d < 5 ? 2.4 : 1.6; if (d > 3) audio.breath(d < 8 ? 0.03 : 0.06); }
-  if (t - S.lastSend > 1 / 10) { S.lastSend = t; send({ t: 's', x: me.x, z: me.z, yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3), fl: false, cr: false, sp: false, sn: false, mv: false }); }
+  if (t - S.lastSend > 1 / 10) { S.lastSend = t; send({ t: 's', x: me.x, z: me.z, L: me.L, yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3), fl: false, cr: false, sp: false, sn: false, mv: false }); }
 }
 
 function updatePlayer(dt, t) {
@@ -929,20 +972,23 @@ function updatePlayer(dt, t) {
   const ox = me.x, oz = me.z;
   let nx = me.x + me.vx * dt, nz = me.z + me.vz * dt;
   for (let pass = 0; pass < 2; pass++) {
-    [nx, nz] = resolveCircle(map, nx, nz, 0.3);
+    [nx, nz] = resolveCircle(map, me.L, nx, nz, 0.3);
     for (const c of S.world.colliders) {
-      if (Math.abs(c[0] - nx) > 4 || Math.abs(c[1] - nz) > 4) continue;
+      if ((c[4] ?? 0) !== me.L || Math.abs(c[0] - nx) > 4 || Math.abs(c[1] - nz) > 4) continue;
       const r = pushOutBox(nx, nz, 0.3, c[0], c[1], c[2], c[3]);
       if (r) { nx = r[0]; nz = r[1]; }
     }
   }
+  // staircases: walking off the top or back down changes floor
+  const tr = stairTransition(map, me.L, nx, nz);
+  if (tr) { [me.L, nx, nz] = tr; message(LEVEL_NAMES[me.L].toUpperCase()); }
   me.x = nx; me.z = nz;
   const moved = Math.hypot(me.x - ox, me.z - oz);
   me.moving = moved > dt * 0.4;
   // footsteps + head bob
   me.stepAcc += moved;
   const stride = me.sprint ? 2.3 : me.crouch ? 1.2 : me.sneak ? 1.0 : 1.85;
-  if (me.stepAcc > stride) { me.stepAcc = 0; if (!me.sneak && !me.crouch) audio.step(me.sprint ? 0.42 : 0.22, null, false, surfaceAt(me.x, me.z)); }
+  if (me.stepAcc > stride) { me.stepAcc = 0; if (!me.sneak && !me.crouch) audio.step(me.sprint ? 0.42 : 0.22, null, false, surfaceAt(me.x, me.z, me.L)); }
   me.bob += moved * (me.sprint ? 3.2 : 3.6);
   const bobAmp = me.sprint ? 0.085 : (me.crouch || me.sneak) ? 0.015 : 0.04;
   // field-of-view kick so sprinting feels fast
@@ -951,7 +997,9 @@ function updatePlayer(dt, t) {
   const eyeT = me.crouch ? 1.05 : 1.62;
   me.eye += (eyeT - me.eye) * Math.min(1, dt * 9);
   const sh = S.shake;
-  camera.position.set(me.x, me.eye + Math.sin(me.bob) * bobAmp * (me.moving ? 1 : 0), me.z);
+  const floorY = heightAt(map, me.L, me.x, me.z);
+  me.floorY = me.floorY === undefined ? floorY : me.floorY + (floorY - me.floorY) * Math.min(1, dt * 14);
+  camera.position.set(me.x, me.floorY + me.eye + Math.sin(me.bob) * bobAmp * (me.moving ? 1 : 0), me.z);
   camera.rotation.set(
     me.pitch + (Math.random() - 0.5) * sh * 0.05,
     me.yaw + (Math.random() - 0.5) * sh * 0.05,
@@ -962,11 +1010,11 @@ function updatePlayer(dt, t) {
   // flashlight battery
   if (me.fl) { me.battery = Math.max(0, me.battery - dt * (100 / 200)); if (me.battery <= 0) { me.fl = false; audio.click(); message('Your flashlight died.', 'red'); } }
   // escape
-  if (S.exitOpen && Math.hypot(me.x - S.map.exit.x, me.z - S.map.exit.z) < 2.3 && t - S.escSent > 1) { S.escSent = t; send({ t: 'escape' }); }
+  if (S.exitOpen && me.L === 0 && Math.hypot(me.x - S.map.exit.x, me.z - S.map.exit.z) < 2.3 && t - S.escSent > 1) { S.escSent = t; send({ t: 'escape' }); }
   // network
   if (t - S.lastSend > 1 / 15) {
     S.lastSend = t;
-    send({ t: 's', x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3), fl: me.fl, cr: me.crouch, sp: me.sprint, sn: me.sneak, mv: me.moving });
+    send({ t: 's', x: +me.x.toFixed(2), z: +me.z.toFixed(2), L: me.L, yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3), fl: me.fl, cr: me.crouch, sp: me.sprint, sn: me.sneak, mv: me.moving });
   }
 }
 
@@ -981,8 +1029,8 @@ function updateDrone(dt) {
     const r = S.players.get(S.droneFollow);
     if (r && !r.escaped) {
       r.avatar.userData.setShown(false);
-      camera.position.set(r.x, r.cr ? 1.05 : 1.6, r.z); camera.rotation.set(r.pitch, r.yaw, 0);
-      return;
+      camera.position.set(r.x, heightAt(S.map, r.L, r.x, r.z) + (r.cr ? 1.05 : 1.6), r.z); camera.rotation.set(r.pitch, r.yaw, 0);
+      S.camL = r.L; return;
     }
     S.droneFollow = null;
   }
@@ -993,7 +1041,8 @@ function updateDrone(dt) {
   const cp = Math.cos(me.pitch);
   me.x += (-Math.sin(me.yaw) * cp * iz + Math.cos(me.yaw) * ix) * sp;
   me.z += (-Math.cos(me.yaw) * cp * iz - Math.sin(me.yaw) * ix) * sp;
-  me.droneY = clamp(me.droneY + (Math.sin(me.pitch) * iz + iy) * sp, 0.3, 45);
+  me.droneY = clamp(me.droneY + (Math.sin(me.pitch) * iz + iy) * sp, -FLOOR_H + 0.3, 45);
+  S.camL = clamp(Math.floor(me.droneY / FLOOR_H), -1, 1);
   camera.position.set(me.x, me.droneY, me.z);
   camera.rotation.set(me.pitch, me.yaw, 0);
 }
@@ -1005,8 +1054,9 @@ function updateSpectate(dt) {
   const el = $('spectate');
   if (!r) { el.textContent = S.me.escaped ? 'YOU ESCAPED. Waiting for the others…' : 'NO ONE LEFT TO WATCH'; return; }
   el.innerHTML = `${S.me.escaped ? 'ESCAPED' : 'DEAD'} · WATCHING <span style="color:${r.color}">${esc(r.name)}</span> · click to switch`;
-  camera.position.set(r.x, r.cr ? 1.05 : 1.6, r.z);
+  camera.position.set(r.x, heightAt(S.map, r.L, r.x, r.z) + (r.cr ? 1.05 : 1.6), r.z);
   camera.rotation.set(r.pitch, r.yaw, 0);
+  S.camL = r.L;
 }
 
 function updateRemotes(dt) {
@@ -1016,14 +1066,14 @@ function updateRemotes(dt) {
     const smp = sampleBuf(r.buf, rt);
     if (smp) { r.x = smp.x; r.z = smp.z; r.yaw = smp.yaw; r.pitch = smp.pitch; }
     const a = r.avatar;
-    a.position.set(r.x, 0, r.z); a.rotation.y = r.yaw;
+    a.position.set(r.x, heightAt(S.map, r.L, r.x, r.z), r.z); a.rotation.y = r.yaw;
     if (r.escaped) { a.userData.setShown(false); a.userData.label.visible = false; continue; }
     if (S.spectating !== r.id && S.droneFollow !== r.id) { a.userData.setShown(!r.hid || S.spectator); a.userData.label.visible = (!r.hid || S.spectator) && r.alive; }
     if (!r.alive) { if (!r.deadShown) { a.userData.setDead(); r.deadShown = true; } continue; }
     const moved = Math.hypot(r.x - ox, r.z - oz);
     a.userData.setPose(r.pitch, r.fl, r.cr, r.mv, dt, moved / Math.max(dt, 1e-3));
     r.step += moved;
-    if (r.step > (r.sp ? 2.3 : 1.85)) { r.step = 0; if (!r.cr && !r.sn) audio.step(r.sp ? 0.45 : 0.25, { x: r.x, z: r.z }, false, surfaceAt(r.x, r.z)); }
+    if (r.step > (r.sp ? 2.3 : 1.85)) { r.step = 0; if (!r.cr && !r.sn) audio.step(r.sp ? 0.45 : 0.25, { x: r.x, z: r.z }, false, surfaceAt(r.x, r.z, r.L)); }
     // label always faces camera (sprite), fade with distance
     const d = Math.hypot(r.x - camera.position.x, r.z - camera.position.z);
     a.userData.label.material.opacity = clamp(1 - (d - 4) / 10, 0.15, 0.85);
@@ -1037,8 +1087,9 @@ function updateCrawler(dt, t) {
   if (smp) { c.x = smp.x; c.z = smp.z; c.yaw = smp.yaw; }
   const moved = Math.hypot(c.x - ox, c.z - oz);
   c.speed += (moved / Math.max(dt, 1e-3) - c.speed) * Math.min(1, dt * 6);
-  g.position.set(c.x, 0, c.z); g.rotation.y = c.yaw;
+  g.position.set(c.x, heightAt(S.map, c.L || 0, c.x, c.z), c.z); g.rotation.y = c.yaw;
   g.userData.update(dt, c.state, c.speed, t);
+  if (!levelShown(c.L || 0)) g.visible = false;
   if (c.state === 'crawl') {
     c.skitter -= dt;
     if (c.skitter <= 0) { c.skitter = 0.22; audio.skitter(c.x, c.z, 0.5); }
@@ -1052,7 +1103,7 @@ function updateCrawler(dt, t) {
 function updateMonster(dt, t) {
   const m = S.mon, g = S.monster;
   if (S.jumpscare) {
-    g.position.set(m.x, -0.35, m.z); g.rotation.y = m.yaw;
+    g.position.set(m.x, heightAt(S.map, S.me.L, m.x, m.z) - 0.35, m.z); g.rotation.y = m.yaw;
     g.userData.update(dt, 0, 'chase', t);
     return;
   }
@@ -1062,9 +1113,15 @@ function updateMonster(dt, t) {
   if (smp) { m.x = smp.x; m.z = smp.z; m.yaw = angLerp(m.yaw, smp.yaw, Math.min(1, dt * 12)); }
   const moved = jump ? 0 : Math.hypot(m.x - ox, m.z - oz);
   m.vis += (moved / Math.max(dt, 1e-3) - m.vis) * Math.min(1, dt * 6);
-  g.position.set(m.x, 0, m.z); g.rotation.y = m.yaw;
-  const st = m.state === 'chase' && m.speed < 0.05 ? 'stall' : m.state;
+  let my = heightAt(S.map, m.L || 0, m.x, m.z);
+  if (m.boundT) { m.boundT += dt; my -= Math.min(3.2, Math.max(0, m.boundT - 1.5) * 0.45); } // bound: she burns and sinks into the star
+  g.position.set(m.x, my, m.z); g.rotation.y = m.yaw;
+  const st = m.state === 'chase' && m.speed < 0.05 ? 'stall' : m.state === 'bound' ? 'stunned' : m.state;
   g.userData.update(dt, m.vis, st, t);
+  // hide her if her floor isn't drawn (keep the root visible: it holds a light)
+  const shown = levelShown(m.L || 0) && !(m.boundT > 9);
+  for (const ch of g.children) if (!ch.isLight) ch.visible = shown;
+  if (g.userData.glow && (!shown || (m.L || 0) !== S.camL)) g.userData.glow.intensity = 0;
   m.step += moved;
   if (m.step > 1.5) { m.step = 0; audio.step(m.state === 'chase' ? 0.7 : 0.45, { x: m.x, z: m.z }, true); }
 }
@@ -1095,7 +1152,7 @@ function updateLights(dt, t) {
   if (S.poolT <= 0) {
     S.poolT = 0.25;
     const cx = camera.position.x, cz = camera.position.z;
-    const list = W.lightSources.filter((s) => !s.dead).map((s) => [Math.hypot(s.x - cx, s.z - cz), s]).sort((a, b) => a[0] - b[0]);
+    const list = W.lightSources.filter((s) => !s.dead && (s.L ?? 0) === S.camL).map((s) => [Math.hypot(s.x - cx, s.z - cz), s]).sort((a, b) => a[0] - b[0]);
     lightPool.forEach((p, k) => {
       const s = list[k] && list[k][0] < 26 ? list[k][1] : null;
       p.src = s;
@@ -1137,7 +1194,7 @@ function updateLights(dt, t) {
     vm.g.position.set(0.24 + Math.sin(me.bob * 0.5) * 0.012 * bobK, -0.25 + Math.abs(Math.cos(me.bob * 0.5)) * 0.012 * bobK - (me.crouch ? 0.02 : 0), -0.42);
     vm.lensM.color.setHex(fl && flashlight.intensity > 1 ? 0xfff4dc : 0x333333);
   }
-  for (const r of S.players.values()) { const L = r.avatar.userData.light; L.intensity = L.userData.on && r.alive && !r.escaped && !r.hid && S.spectating !== r.id ? S.tune.remote : 0; }
+  for (const r of S.players.values()) { const Lt = r.avatar.userData.light; Lt.intensity = Lt.userData.on && r.alive && !r.escaped && !r.hid && r.L === S.camL && S.spectating !== r.id ? S.tune.remote : 0; }
 
   // dust in the beam
   if (dust) {
@@ -1183,13 +1240,14 @@ function updateInteract() {
     const s = dot - d * 0.1;
     if ((dot > 0.55 || d < 0.9) && s > bs - 1) { bs = s; best = { id, label }; }
   };
-  for (const [id, tl] of S.world.talismans) if (!tl.taken) consider(id, tl.x, tl.z, 2.4, 'Take the bone effigy');
-  for (const [id, b] of S.world.batteries) if (!b.taken) consider(id, b.x, b.z, 1.9, 'Pick up battery');
-  for (const [id, b] of S.world.bells) if (!b.taken) consider(id, b.x, b.z, 1.9, 'Take the spirit bell');
-  for (const [id, c] of S.world.souls) if (!c.taken) consider(id, c.x, c.z, 1.9, 'Take the aatma candle');
+  const here = (o) => (o.L ?? 0) === me.L;
+  for (const [id, tl] of S.world.talismans) if (!tl.taken && here(tl)) consider(id, tl.x, tl.z, 2.4, `Take the ${tl.name.toLowerCase()}`);
+  for (const [id, b] of S.world.batteries) if (!b.taken && here(b)) consider(id, b.x, b.z, 1.9, 'Pick up battery');
+  for (const [id, b] of S.world.bells) if (!b.taken && here(b)) consider(id, b.x, b.z, 1.9, 'Take the spirit bell');
+  for (const [id, c] of S.world.souls) if (!c.taken && here(c)) consider(id, c.x, c.z, 1.9, 'Take the aatma candle');
   // a fallen friend: hold E with a soul candle to bring them back
   for (const r of S.players.values()) {
-    if (r.alive || r.escaped) continue;
+    if (r.alive || r.escaped || r.L !== me.L) continue;
     const d = Math.hypot(r.x - me.x, r.z - me.z);
     if (d > 2.4) continue;
     if (me.revives > 0) {
@@ -1207,35 +1265,34 @@ function updateInteract() {
     } else best = { id: 'nocandle', label: `Find an aatma candle to revive ${esc(r.name)}` };
     break;
   }
-  for (const [id, n] of S.world.notes) consider(id, n.x, n.z, 1.8, n.read ? 'Read the note again' : 'Read the note');
-  if (!best) for (const [id, h] of S.world.hides) consider(id, h.x + h.fx * (h.type === 'bed' ? 1.15 : 0.5), h.z + h.fz * (h.type === 'bed' ? 1.15 : 0.5), 1.7, h.type === 'bed' ? 'Hide under the bed' : `Hide in the ${h.type}`);
+  for (const [id, n] of S.world.notes) if (here(n)) consider(id, n.x, n.z, 1.8, n.read ? 'Read the note again' : 'Read the note');
+  if (!best) for (const [id, h] of S.world.hides) if (here(h)) consider(id, h.x + h.fx * (h.type === 'bed' ? 1.15 : 0.5), h.z + h.fz * (h.type === 'bed' ? 1.15 : 0.5), 1.7, h.type === 'bed' ? 'Hide under the bed' : `Hide in the ${h.type}`);
   if (best && best.id[0] === 'h') best.hide = true;
   if (best && best.id[0] === 'n') best.note = true;
   if (me.hidden) { const ht = S.world.hides.get(me.hidden)?.type || 'locker'; setPrompt(ht === 'bed' ? '<b>E</b>Crawl out from under the bed' : `<b>E</b>Get out of the ${ht}`); S.prompt = null; return; }
-  const H = S.world.heart, hd = Math.hypot(H.x - me.x, H.z - me.z);
-  if (S.stage === 'heart' && hd < 2.6) {
-    best = { id: 'heart', burn: true, label: 'Hold E to burn her heart' };
-    if (S.burn) {
-      if (!keys.KeyE) { S.burn = null; }
-      else {
-        S.burn.t = (performance.now() - S.burn.start) / 1000;
-        const pct = Math.min(100, (S.burn.t / 4) * 100);
-        setPrompt(`<b>E</b>Burning… <span style="display:inline-block;width:160px;height:6px;background:#300;vertical-align:middle"><i style="display:block;height:100%;width:${Math.round(pct)}%;background:#ff5a20"></i></span>`);
-        S.prompt = best;
-        if (S.burn.t >= 4 && !S.burn.sent) { S.burn.sent = true; send({ t: 'burn' }); }
-        return;
-      }
-    }
-  } else if (S.burn) S.burn = null;
+  // the shrine: place carried items on the star, then lure her in
+  const sh = S.world.shrine;
+  if (me.L === sh.L && Math.hypot(sh.x - me.x, sh.z - me.z) < sh.r + 3) {
+    if (S.stage === 'items' && me.items.length) {
+      let bd = 2.3;
+      sh.points.forEach((pt, slot) => {
+        if (S.placed[slot]) return;
+        const d = Math.hypot(pt.x - me.x, pt.z - me.z);
+        if (d < bd) { bd = d; best = { id: 'slot' + slot, place: true, slot, label: `Place the ${S.world.talismans.get(me.items[0]).name.toLowerCase()} on the star` }; }
+      });
+    } else if (S.stage === 'lure' && !best) { setPrompt('MAKE HER FOLLOW YOU INTO THE CENTRE OF THE STAR'); S.prompt = null; return; }
+  }
   S.prompt = best;
   if (best) setPrompt(`<b>E</b>${best.label}`);
-  else if (S.exitOpen && Math.hypot(me.x - S.map.exit.x, me.z - S.map.exit.z) < 6) setPrompt('GO THROUGH THE DOOR');
+  else if (S.exitOpen && me.L === 0 && Math.hypot(me.x - S.map.exit.x, me.z - S.map.exit.z) < 6) setPrompt('GO THROUGH THE DOOR');
   else setPrompt('');
 }
 
 let hudT = 0, hudKey = '', teamKey = '';
 function updateHUD(dt) {
   const me = S.me;
+  const fl = (LEVEL_NAMES[S.camL] || '').toUpperCase();
+  if ($('floorTag').textContent !== fl) $('floorTag').textContent = fl;
   const hk = `${Math.round(me.battery)}|${Math.round(me.stamina)}|${me.exhausted}|${me.bells}|${me.revives}`;
   if (hk !== hudKey) {
     hudKey = hk;
@@ -1259,12 +1316,13 @@ function updateAudioAndFear(dt, t) {
   const fwd = tmpV.set(0, 0, -1).applyEuler(camera.rotation);
   audio.setListener(camera.position, fwd);
   audio.listenerPos = camera.position;
-  const d = Math.hypot(m.x - camera.position.x, m.z - camera.position.z);
-  const active = m.state !== 'dormant';
+  const dl = Math.abs((m.L || 0) - S.camL);
+  const d = dl ? 99 : Math.hypot(m.x - camera.position.x, m.z - camera.position.z);
+  const active = m.state !== 'dormant' && m.state !== 'bound';
   const chasingMe = m.state === 'chase' && m.target === S.myId && me.alive;
-  const vis = active && d < 22 && lineOfSight(S.map, camera.position.x, camera.position.z, m.x, m.z);
+  const vis = active && d < 22 && lineOfSight(S.map, S.camL, camera.position.x, camera.position.z, m.x, m.z);
   const level = !active ? 0 : m.state === 'chase' || m.state === 'stunned' ? 1 : m.state === 'hunt' ? 0.6 : 0.4;
-  audio.setMonster(m.x, m.z, level * 0.7, m.state === 'chase');
+  audio.setMonster(m.x, m.z, level * 0.7 * (dl === 0 ? 1 : dl === 1 ? 0.3 : 0), m.state === 'chase');
   let close = active ? clamp(1 - d / 20, 0, 1) : 0;
   if (chasingMe) close = Math.max(close, 0.65);
   if (me.hidden) close = Math.max(close, active ? clamp(1 - d / 10, 0, 1) : 0);
@@ -1298,6 +1356,26 @@ function updatePost(dt, t) {
   if (!S.whiteOut) renderer.toneMappingExposure = S.tune.exposure + S.eyeAdj * 0.8;
 }
 
+// ---------------- which floors to draw ----------------
+const levelVis = { '-1': true, 0: true, 1: true };
+function levelShown(L) { return levelVis[L]; }
+function updateLevels() {
+  const cx = camera.position.x, cz = camera.position.z;
+  const all = S.spectator && !S.droneFollow && S.me.droneY > FLOOR_H + 0.2;
+  for (const L of LEVELS) {
+    let v = L === S.camL || all;
+    if (!v && Math.abs(L - S.camL) === 1) {
+      // near a staircase you can see the floor above/below through the stairwell
+      for (const st of S.map.stairs) {
+        if (!((st.L === L && st.L + 1 === S.camL) || (st.L === S.camL && st.L + 1 === L))) continue;
+        if (Math.hypot((st.c2[0] + 0.5) * CELL - cx, (st.c2[1] + 0.5) * CELL - cz) < 9) { v = true; break; }
+      }
+    }
+    levelVis[L] = v; S.world.levelGroups[L].visible = v;
+  }
+  for (const r of S.players.values()) if (!levelVis[r.L] && !r.escaped) { r.avatar.userData.setShown(false); r.avatar.userData.label.visible = false; }
+}
+
 // ---------------- main loop ----------------
 let last = performance.now();
 function frame(now) {
@@ -1308,13 +1386,15 @@ function frame(now) {
   if (S.phase !== 'playing' || !S.scene || !S.me) { if (S.composer && S.scene) S.composer.render(dt); return; }
   const me = S.me;
   if (S.reading && (!me.alive || (S.mon.state === 'chase' && S.mon.target === S.myId))) closeNote();
+  if (!S.spectator && S.spectating === null) S.camL = me.L;
   if (S.spectator) updateDrone(dt);
   else if (me.alive && !me.escaped && !S.jumpscare) updatePlayer(dt, t);
   else if (S.jumpscare) {
-    camera.position.set(me.x, 1.5, me.z);
+    camera.position.set(me.x, me.L * FLOOR_H + 1.5, me.z);
     camera.rotation.set(me.pitch + (Math.random() - 0.5) * 0.08, me.yaw + (Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.1);
   } else if (S.spectating !== null) updateSpectate(dt);
   updateRemotes(dt);
+  updateLevels();
   updateMonster(dt, t);
   updateCrawler(dt, t);
   updateLights(dt, t);
@@ -1357,4 +1437,5 @@ function adaptResolution(now) {
 requestAnimationFrame(frame);
 
 // debug hooks (used for automated testing)
+window.__hm.frame = frame; // lets automated tests step the game while the tab is hidden
 window.__hm.S = S; window.__hm.keys = keys; window.__hm.runScare = (type) => runScare(performance.now() / 1000, type);
