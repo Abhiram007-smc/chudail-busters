@@ -288,6 +288,19 @@ Original checklist:
 - Loading screen (`#loading`, `startLoadingFx()` in main.js): min ~4.2 s, typed creepy lines, heartbeat, a subliminal
   face, ends with a red flash + door slam.
 
+## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
+
+The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).
+The game still runs on the owner's laptop; a named tunnel gives it a fixed address.
+
+One-time setup on the machine that runs the game:
+1. `cloudflared tunnel login` (opens the browser; pick chudailbusters.com). Writes `~/.cloudflared/cert.pem`.
+2. `cloudflared tunnel create chudail` (writes `~/.cloudflared/<uuid>.json` credentials).
+3. `cloudflared tunnel route dns chudail chudailbusters.com` (adds the CNAME at the zone apex).
+4. Put `tunnel.json` next to server.js (gitignored): `{"name": "chudail", "hostname": "chudailbusters.com"}`.
+Then `npm run online` serves https://chudailbusters.com (server.js `startTunnel()` runs `cloudflared tunnel run`;
+without tunnel.json it falls back to a random trycloudflare.com quick tunnel).
+
 ## 8. Assets & credits
 See README "Credits". Characters by Quaternius (CC0 / one CC-BY "Soldier"), scream CC0 from Wikimedia Commons,
 fonts from Google Fonts (OFL). Monster built by `blender/build_characters.py`.

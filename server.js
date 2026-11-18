@@ -604,16 +604,32 @@ server.listen(PORT, () => {
   else console.log('\n  Friends in another city or country? Run:  npm run online\n');
 });
 
-// ---------------- play from anywhere: free Cloudflare quick tunnel ----------------
+// ---------------- play from anywhere: Cloudflare tunnel ----------------
+// With a tunnel.json next to server.js ({"name": "chudail", "hostname": "chudailbusters.com"}) and that named
+// tunnel created on this machine (docs/HANDOFF.md, "Own domain"), the game is served on the fixed domain.
+// Otherwise a free quick tunnel gives a random https://*.trycloudflare.com link that changes every start.
+function namedTunnel() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(new URL('./tunnel.json', import.meta.url), 'utf8'));
+    if (cfg.name && cfg.hostname) return cfg;
+  } catch {}
+  return null;
+}
 function startTunnel() {
-  console.log('\n  Opening a worldwide link (Cloudflare tunnel)...');
+  const named = namedTunnel();
+  console.log(named ? `\n  Opening https://${named.hostname} (Cloudflare tunnel "${named.name}")...` : '\n  Opening a worldwide link (Cloudflare tunnel)...');
   let proc;
   const bin = ['/opt/homebrew/bin/cloudflared', '/usr/local/bin/cloudflared'].find((f) => fs.existsSync(f)) || 'cloudflared';
-  try { proc = spawn(bin, ['tunnel', '--no-autoupdate', '--url', `http://localhost:${PORT}`]); }
+  const args = named
+    ? ['tunnel', '--no-autoupdate', 'run', '--url', `http://localhost:${PORT}`, named.name]
+    : ['tunnel', '--no-autoupdate', '--url', `http://localhost:${PORT}`];
+  try { proc = spawn(bin, args); }
   catch { return tunnelMissing(); }
   proc.on('error', tunnelMissing);
   const scan = (buf) => {
-    const m = String(buf).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+    const txt = String(buf);
+    const m = named ? (/Registered tunnel connection/.test(txt) ? [`https://${named.hostname}`] : null) : txt.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+    if (named && /error|failed/i.test(txt) && !game.publicUrl) console.log('  [tunnel] ' + txt.trim().split('\n').pop());
     if (m && !game.publicUrl) {
       game.publicUrl = m[0];
       console.log(`\n  >>> Friends ANYWHERE join here:  ${game.publicUrl}\n`);
