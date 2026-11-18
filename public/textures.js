@@ -389,6 +389,39 @@ export function ritualCanvas() {
   return c;
 }
 
+// The black-magic star carved into the shrine floor (also used as its own emissive map)
+export function pentagramCanvas() {
+  const S = 1024, c = canvas(S), g = c.getContext('2d'), C = S / 2;
+  const red = (a) => `rgba(${rr(120, 170)},${rr(0, 12)},${rr(0, 8)},${a})`;
+  // scorched floor under the circle
+  const burn = g.createRadialGradient(C, C, 80, C, C, C);
+  burn.addColorStop(0, 'rgba(10,0,0,0.75)'); burn.addColorStop(0.75, 'rgba(15,4,2,0.5)'); burn.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = burn; g.fillRect(0, 0, S, S);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const RAD = C * 0.8;
+  for (const pass of [0, 1]) { // a blurred glow pass, then the sharp carved line
+    g.filter = pass ? 'none' : 'blur(10px)';
+    g.strokeStyle = pass ? red(0.95) : 'rgba(255,30,10,0.7)';
+    for (const [r, w] of [[RAD * 1.12, 16], [RAD * 1.04, 7], [RAD * 0.36, 8]]) { g.lineWidth = pass ? w : w * 2.5; g.beginPath(); g.arc(C, C, r, 0, 7); g.stroke(); }
+    g.lineWidth = pass ? 13 : 30; g.beginPath();
+    for (let k = 0; k <= 5; k++) { const a = -Math.PI / 2 + (k * 4 * Math.PI) / 5; const x = C + Math.cos(a) * RAD, y = C + Math.sin(a) * RAD; k ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  }
+  g.filter = 'none';
+  // runes between the circles + a sigil at every point
+  g.fillStyle = red(0.95); g.font = '46px "IM Fell English SC", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const runes = 'ᛟᚲᛞᚺᛉᛏᛋᚾᛁᛒᛗᛚᛜᛞᛟᚨᚢᚦᚱᚷ';
+  for (let k = 0; k < runes.length; k++) { const a = (k / runes.length) * Math.PI * 2; g.save(); g.translate(C + Math.cos(a) * RAD * 1.08, C + Math.sin(a) * RAD * 1.08); g.rotate(a + Math.PI / 2); g.fillText(runes[k], 0, 0); g.restore(); }
+  for (let k = 0; k < 5; k++) {
+    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5, x = C + Math.cos(a) * RAD, y = C + Math.sin(a) * RAD;
+    g.lineWidth = 6; g.strokeStyle = red(0.9); g.beginPath(); g.arc(x, y, 44, 0, 7); g.stroke();
+  }
+  // blood splatter + drips
+  for (let k = 0; k < 140; k++) { const a = R() * 6.28, d = rr(0, C * 0.95); g.fillStyle = red(rr(0.4, 0.9)); g.beginPath(); g.arc(C + Math.cos(a) * d, C + Math.sin(a) * d, rr(1, 7), 0, 7); g.fill(); }
+  for (let k = 0; k < 6; k++) handprint(g, C + rr(-RAD, RAD) * 0.7, C + rr(-RAD, RAD) * 0.7, rr(0.9, 1.4), R() * 6, red(0.75));
+  return c;
+}
+
 // Crumpled note lying on the floor
 export function paperCanvas() {
   const W = 256, H = 340, c = canvas(W, H), g = c.getContext('2d');
