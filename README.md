@@ -41,10 +41,10 @@ Pick one in the lobby before anyone presses **Begin**:
 
 | Mode | What changes |
 | --- | --- |
-| Easy | she is slower, sees and hears less, no Crawler, more supplies, longer to revive friends |
+| Easy | she is slower, sees and hears less, no Crawler, more batteries, bells and aatma candles |
 | Normal | the intended game |
-| Hard | faster, sees and hears further, fewer supplies, less time to revive |
-| Nightmare | much faster and sharper, very few supplies, almost no time to revive |
+| Hard | faster, sees and hears further, fewer batteries, bells and aatma candles |
+| Nightmare | much faster and sharper, about half the supplies and very few aatma candles |
 
 ## How to win
 
