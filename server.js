@@ -72,7 +72,7 @@ const spectators = new Set(); // hidden admins: receive everything, invisible to
 const broadcast = (msg) => { const s = JSON.stringify(msg); for (const p of game.players.values()) if (p.ws.readyState === 1) p.ws.send(s); for (const w of spectators) if (w.readyState === 1) w.send(s); };
 const now = () => game.time;
 const rand = (a, b) => a + Math.random() * (b - a);
-const INTRO_S = 80; // intro cut scene (public/intro.js): up to ~60 s with the co-op chat + ~14 s dragged into the house; she sleeps through it
+const INTRO_S = 95; // intro cut scene (public/intro.js): ~55 s drive + silent co-op chat, the crash, ~17 s dragged into the house; she sleeps through it
 const frontOf = (h) => (h.type === 'bed' ? 1.55 : 0.95); // where you stand in front of a hiding spot
 const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -570,6 +570,8 @@ wss.on('connection', (ws) => {
       me.x = +msg.x || me.x; me.z = +msg.z || me.z;
       if ([-1, 0, 1].includes(msg.L)) me.L = msg.L;
       me.fl = !!msg.fl; me.cr = !!msg.cr; me.sp = !!msg.sp; me.sn = !!msg.sn; me.mv = !!msg.mv;
+    } else if (msg.t === 'jump') { // everyone else plays the same arc on their screen
+      if (me.alive && !me.escaped && !me.hid) broadcast({ t: 'ev', e: 'jump', id: me.id });
     } else if (msg.t === 'hide') {
       if (!me.alive || me.escaped || me.hid) return;
       const h = game.map.hides.find((q) => q.id === msg.id);

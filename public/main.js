@@ -9,7 +9,8 @@ import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
 import * as TX from './textures.js';
-import { preloadIntro, playIntro } from './intro.js';
+import { preloadIntro, playIntro, playOutro } from './intro.js';
+import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = (id) => document.getElementById(id);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -288,7 +289,7 @@ document.addEventListener('pointerlockchange', () => {
   if (S.phase === 'playing' && !locked) showScreen('resume');
   else if (S.phase === 'playing' && locked) {
     showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME';
-    if (S.wakePending && S.me) { S.wakePending = false; S.me.wake = 0; $('eyes').className = 'open'; canvas.style.transition = 'filter 4.5s ease-out'; canvas.style.filter = 'blur(9px) brightness(0.6)'; requestAnimationFrame(() => requestAnimationFrame(() => (canvas.style.filter = ''))); setTimeout(() => { canvas.style.transition = ''; $('eyes').className = ''; }, 5200); }
+    if (S.wakePending && S.me) { S.wakePending = false; S.me.wake = 0; wakeUpSequence(); $('eyes').className = 'open'; canvas.style.transition = 'filter 4.5s ease-out'; canvas.style.filter = 'blur(9px) brightness(0.6)'; requestAnimationFrame(() => requestAnimationFrame(() => (canvas.style.filter = ''))); setTimeout(() => { canvas.style.transition = ''; $('eyes').className = ''; }, 5200); }
   }
 });
 addEventListener('resize', () => {
@@ -467,7 +468,7 @@ function buildGame(m) {
     showScreen(''); $('hud').classList.remove('show');
     S.intro = playIntro({
       renderer, assets: S.introAssets, audio, calm: FX.calm,
-      players: [...m.players].sort((a, b) => a.id - b.id),
+      players: [...m.players].sort((a, b) => a.id - b.id), meId: S.myId,
       onDone: () => { S.intro = null; $('hud').classList.add('show'); enterHouse(m, true); },
     });
     return;
@@ -482,9 +483,9 @@ function enterHouse(m, woke) {
   // the door shuts behind you
   fxFlash('#7a0000', woke ? 0.4 : 0.8, 700); if (!woke) { audio.stinger(0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1); }
   showScreen('resume');
-  $('resume').querySelector('h2').textContent = 'CLICK TO ENTER';
-  if (!S.spectator) showBriefing(); else $('brief').style.display = 'none';
-  if (!S.spectator) setTimeout(() => {
+  $('resume').querySelector('h2').textContent = woke && !S.spectator ? 'CLICK TO WAKE UP' : 'CLICK TO ENTER';
+  if (!S.spectator && !woke) showBriefing(); else $('brief').style.display = 'none';
+  if (!S.spectator && !woke) setTimeout(() => {
     if (S.mapBad) { message('This page is out of date with the server. Refresh the page (Ctrl/Cmd + Shift + R).', 'red'); return; }
     message(woke ? 'You wake up on a cold floor. The car... the truck... where are the others?' : 'The front door slammed shut behind you.');
     setTimeout(() => message('The star in the basement wants five gifts. Find the riddles.', 'red'), 2500);
@@ -661,7 +662,7 @@ function onEvent(m) {
         S.me.escaped = true; S.black = 0; S.whiteOut = 1;
         message('You escaped Ashgrove. She will not follow you.');
         audio.setChase(false);
-        setTimeout(() => startSpectate(), 2500);
+        playEnding();
       } else {
         const r = S.players.get(m.id); if (r) { r.escaped = true; r.avatar.userData.setShown(false); r.avatar.userData.label.visible = false; }
         message(`${nameOf(m.id)} escaped!`);
@@ -718,6 +719,7 @@ function onEvent(m) {
       break;
     }
     case 'stage': {
+      if (m.stage === 'escape') outroCar(); // fetch the car for the ending now
       S.stage = m.stage;
       if (m.stage === 'lure') {
         S.world.shrine.setActive();
@@ -743,6 +745,7 @@ function onEvent(m) {
       buildIcons(); setObjective(); renderClues();
       break;
     }
+    case 'jump': { const r = S.players.get(m.id); if (r && m.id !== S.myId) r.jt = 0; break; }
     case 'stare': { // you looked at her down the hall, and she stopped to look back
       if (m.id === S.myId) { audio.stareDrone(2.6); S.stareUntil = performance.now() / 1000 + 3.2; }
       break;
@@ -809,7 +812,28 @@ function addBlood(x, z, L = 0) {
   mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = Math.random() * 6; mesh.position.set(x, 0.014, z); S.world.levelGroups[L].add(mesh);
 }
 
+// the car for the ending (the intro already has it; late joiners load it when the escape opens)
+function outroCar() {
+  if (S.introAssets && S.introAssets.car) return Promise.resolve(S.introAssets.car);
+  if (!S.outroCarP) S.outroCarP = new Promise((res) => new OutroLoader().load('/models/intro_car.glb', (g) => res(g.scene), undefined, () => res(null)));
+  return S.outroCarP;
+}
+// you got out: everyone who made it drives away in the wrecked car, then you watch the others
+function playEnding() {
+  const after = () => { S.intro = null; if (S.pendingEnd) { const e = S.pendingEnd; S.pendingEnd = null; onEnd(e); } else if (S.phase === 'playing') { $('hud').classList.add('show'); startSpectate(); } };
+  if (document.pointerLockElement) document.exitPointerLock();
+  outroCar().then((car) => {
+    if (!car || S.phase !== 'playing' || S.spectator) { setTimeout(after, 1500); return; }
+    const out = [{ id: S.myId, name: S.name, char: S.myChar }];
+    for (const [id, r] of S.players) if (r.escaped && id !== S.myId) out.push({ id, name: r.name, char: r.char });
+    $('hud').classList.remove('show'); showScreen('');
+    S.intro = playOutro({ renderer, assets: { car }, players: out, meId: S.myId, audio, onDone: after });
+    if (!S.intro) after();
+  });
+}
+
 function onEnd(m) {
+  if (S.intro && S.intro.outro) { S.pendingEnd = m; return; } // let the drive away finish first
   if (S.intro) { S.intro.abort(); S.intro = null; $('hud').classList.add('show'); }
   S.phase = 'ended';
   if (document.pointerLockElement) document.exitPointerLock();
@@ -836,8 +860,8 @@ function setObjective() {
 }
 
 // briefing shown on the "click to enter" screen at the start of a game
-function showBriefing() {
-  $('brief').innerHTML = `
+function showBriefing(target = $('brief')) {
+  target.innerHTML = `
     <div class="bh">YOUR OBJECTIVES</div>
     <ol>
       <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff left riddles in their notes, and each item has her sign: find the same sign scratched on the walls. Listen too: they whisper when you are close.</li>
@@ -850,11 +874,35 @@ function showBriefing() {
       <li><span style="color:#ffd27a">Spirit bells</span>: press <kbd>Q</kbd> to freeze her for 6 seconds.</li>
       <li><span style="color:#9fd8ff">Aatma candles</span>: hold <kbd>E</kbd> over a fallen friend to bring them back.</li>
       <li>Hide in lockers, wardrobes and under beds, but never while she is watching.</li>
-      <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent.</li>
+      <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent. <kbd>Space</kbd> jump.</li>
       <li>Something lives on the ceiling once the first item is taken. Look up.</li>
     </ul>`;
-  $('brief').style.display = 'block';
+  target.style.display = 'block';
 }
+
+// waking up after the intro: you say it out loud (well, in subtitles), then the objectives pop up
+function wakeUpSequence() {
+  const who = esc(S.name || 'You');
+  S.timers.push(setTimeout(() => {
+    $('wakesub').innerHTML = `<b>${who}:</b> We're stuck in this house... we have to find a way out.`;
+    $('wakesub').style.opacity = 1;
+  }, 2600));
+  S.timers.push(setTimeout(() => ($('wakesub').style.opacity = 0), 6600));
+  S.timers.push(setTimeout(() => showObjectivesPopup(), 7200));
+}
+function showObjectivesPopup() {
+  const pop = $('objpop');
+  showBriefing(pop.querySelector('.inner'));
+  pop.classList.add('show');
+  clearTimeout(S.objT); S.objT = setTimeout(hideObjectivesPopup, 16000);
+}
+function hideObjectivesPopup() {
+  const pop = $('objpop');
+  if (!pop.classList.contains('show')) return;
+  pop.classList.remove('show'); clearTimeout(S.objT);
+  message('The star in the basement wants five gifts. Find the riddles.', 'red');
+}
+addEventListener('keydown', (e) => { if (e.code === 'Enter' && $('objpop').classList.contains('show')) hideObjectivesPopup(); });
 
 // ---------------- notes & clues ----------------
 function openNote(id) {
@@ -1138,6 +1186,9 @@ function updateHidden(dt, t) {
   if (t - S.lastSend > 1 / 10) { S.lastSend = t; send({ t: 's', x: me.x, z: me.z, L: me.L, yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3), fl: false, cr: false, sp: false, sn: false, mv: false }); }
 }
 
+const JUMP = { v: 4.4, g: 13 }; // take-off speed (m/s) and gravity: ~0.74 m high, ~0.68 s in the air
+function jumpArc(t) { return Math.max(0, JUMP.v * t - 0.5 * JUMP.g * t * t); }
+
 function updatePlayer(dt, t) {
   const me = S.me, map = S.map;
   if (me.hidden) return updateHidden(dt, t);
@@ -1176,8 +1227,21 @@ function updatePlayer(dt, t) {
   me.x = nx; me.z = nz;
   const moved = Math.hypot(me.x - ox, me.z - oz);
   me.moving = moved > dt * 0.4;
+  // jump (Space): a real arc; everyone else plays the same arc from the 'jump' event
+  if (me.jy == null) { me.jy = 0; me.jv = 0; me.land = 0; }
+  const wantJump = !!keys.Space;
+  if (wantJump && !me.spaceWas && me.jy === 0 && me.jv === 0 && !me.crouch && !S.wakePending && me.wake == null && me.stamina > 10) {
+    me.jv = JUMP.v; me.stamina -= 10; send({ t: 'jump' }); audio.step(0.18, null, false, surfaceAt(me.x, me.z, me.L));
+  }
+  me.spaceWas = wantJump;
+  if (me.jy > 0 || me.jv > 0) {
+    me.jv -= JUMP.g * dt; me.jy += me.jv * dt;
+    if (me.jy <= 0) { me.jy = 0; me.jv = 0; me.land = 1; me.stepAcc = 0; audio.step(0.55, null, false, surfaceAt(me.x, me.z, me.L)); }
+  }
+  me.land = Math.max(0, me.land - dt * 5);
+  const airborne = me.jy > 0;
   // footsteps + head bob
-  me.stepAcc += moved;
+  if (!airborne) me.stepAcc += moved;
   const stride = me.sprint ? 2.3 : me.crouch ? 1.2 : me.sneak ? 1.0 : 1.85;
   if (me.stepAcc > stride) { me.stepAcc = 0; if (!me.sneak && !me.crouch) audio.step(me.sprint ? 0.42 : 0.22, null, false, surfaceAt(me.x, me.z, me.L)); }
   me.bob += moved * (me.sprint ? 3.2 : 3.6);
@@ -1198,7 +1262,7 @@ function updatePlayer(dt, t) {
   const sh = S.shake;
   const floorY = heightAt(map, me.L, me.x, me.z);
   me.floorY = me.floorY === undefined ? floorY : me.floorY + (floorY - me.floorY) * Math.min(1, dt * 14);
-  camera.position.set(me.x, me.floorY + me.eye + Math.sin(me.bob) * bobAmp * (me.moving ? 1 : 0), me.z);
+  camera.position.set(me.x, me.floorY + me.eye + me.jy - Math.sin(me.land * Math.PI) * 0.09 + Math.sin(me.bob) * bobAmp * (me.moving && !airborne ? 1 : 0), me.z);
   camera.rotation.set(
     me.pitch + (Math.random() - 0.5) * sh * 0.05,
     me.yaw + (Math.random() - 0.5) * sh * 0.05,
@@ -1228,7 +1292,7 @@ function updateDrone(dt) {
     const r = S.players.get(S.droneFollow);
     if (r && !r.escaped) {
       r.avatar.userData.setShown(false);
-      camera.position.set(r.x, heightAt(S.map, r.L, r.x, r.z) + (r.cr ? 1.05 : 1.6), r.z); camera.rotation.set(r.pitch, r.yaw, 0);
+      camera.position.set(r.x, heightAt(S.map, r.L, r.x, r.z) + (r.cr ? 1.05 : 1.6) + (r.jy || 0), r.z); camera.rotation.set(r.pitch, r.yaw, 0);
       S.camL = r.L; return;
     }
     S.droneFollow = null;
@@ -1265,12 +1329,18 @@ function updateRemotes(dt) {
     const smp = sampleBuf(r.buf, rt);
     if (smp) { r.x = smp.x; r.z = smp.z; r.yaw = smp.yaw; r.pitch = smp.pitch; }
     const a = r.avatar;
-    a.position.set(r.x, heightAt(S.map, r.L, r.x, r.z), r.z); a.rotation.y = r.yaw;
+    let air = 0; r.jy = 0;
+    if (r.jt != null) { // a jump: the same arc they see, with knees tucked
+      r.jt += dt; const T = (2 * JUMP.v) / JUMP.g;
+      if (r.jt >= T) { r.jt = null; if (r.alive && !r.hid && !r.escaped) audio.step(0.4, { x: r.x, z: r.z }, false, surfaceAt(r.x, r.z, r.L)); }
+      else { r.jy = jumpArc(r.jt); air = Math.sin(Math.PI * r.jt / T); }
+    }
+    a.position.set(r.x, heightAt(S.map, r.L, r.x, r.z) + r.jy, r.z); a.rotation.y = r.yaw;
     if (r.escaped) { a.userData.setShown(false); a.userData.label.visible = false; continue; }
     if (S.spectating !== r.id && S.droneFollow !== r.id) { a.userData.setShown(!r.hid || S.spectator); a.userData.label.visible = (!r.hid || S.spectator) && r.alive; }
     if (!r.alive) { if (!r.deadShown) { a.userData.setDead(); r.deadShown = true; } continue; }
     const moved = Math.hypot(r.x - ox, r.z - oz);
-    a.userData.setPose(r.pitch, r.fl, r.cr, r.mv, dt, moved / Math.max(dt, 1e-3));
+    a.userData.setPose(r.pitch, r.fl, r.cr, r.mv, dt, moved / Math.max(dt, 1e-3), air);
     r.step += moved;
     if (r.step > (r.sp ? 2.3 : 1.85)) { r.step = 0; if (!r.cr && !r.sn) audio.step(r.sp ? 0.45 : 0.25, { x: r.x, z: r.z }, false, surfaceAt(r.x, r.z, r.L)); }
     // label always faces camera (sprite), fade with distance
@@ -1678,3 +1748,4 @@ requestAnimationFrame(frame);
 // debug hooks (used for automated testing)
 window.__hm.frame = frame; // lets automated tests step the game while the tab is hidden
 window.__hm.S = S; window.__hm.keys = keys; window.__hm.runScare = (type) => runScare(performance.now() / 1000, type);
+window.__hm.playEnding = () => playEnding(); window.__hm.onMsg = (m) => handle(m);

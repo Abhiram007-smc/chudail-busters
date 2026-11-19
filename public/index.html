@@ -107,6 +107,15 @@
   #spectate { position: absolute; bottom: 60px; width: 100%; text-align: center; font-size: 16px; letter-spacing: .25em; color: #b33; display: none; text-shadow: 0 0 10px #000; }
 
   #resume { background: rgba(0,0,0,.55); z-index: 8; cursor: pointer; }
+  #wakesub { position: fixed; left: 50%; bottom: 14%; transform: translateX(-50%); z-index: 7; max-width: min(760px, 92vw); text-align: center; font-size: 22px; line-height: 1.45; color: #e6dcc2; text-shadow: 0 0 6px #000, 0 2px 4px #000; opacity: 0; transition: opacity .6s; pointer-events: none; }
+  #wakesub b { color: #ffd27a; margin-right: .4em; }
+  #objpop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.97); z-index: 7; width: min(620px, 92vw); max-height: 86vh; overflow: auto; background: rgba(8,6,6,.9); border: 1px solid #5a2a20; box-shadow: 0 0 40px rgba(120,0,0,.35); padding: 22px 28px 14px; font-size: 14px; line-height: 1.6; color: #b9ae96; opacity: 0; pointer-events: none; transition: opacity .5s, transform .5s; }
+  #objpop.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #objpop .bh { font-family: 'Creepster', serif; font-size: 22px; letter-spacing: .12em; color: #e6dcc2; margin: 4px 0 8px; }
+  #objpop ol, #objpop ul { margin: 0 0 14px; padding-left: 22px; }
+  #objpop li { margin-bottom: 4px; }
+  #objpop b { color: #e6dcc2; }
+  #objpop .hint { text-align: right; color: #7d7464; font-size: 12px; }
   #resume h2 { font-family: 'Creepster', serif; font-size: 44px; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 0 20px rgba(150,0,0,.7); font-weight: normal; }
   #resume p { color: #8f8676; }
   #brief { display: none; width: min(620px, 92vw); background: rgba(8,6,6,.85); border: 1px solid #3a2620; padding: 22px 28px; margin-bottom: 18px; font-size: 14px; line-height: 1.6; color: #b9ae96; }
@@ -260,6 +269,8 @@
 <div id="redflash"></div>
 <div id="note"><div class="paper"><div class="text" id="noteText"></div><img id="noteSigil" alt="" /><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
 
+<div id="wakesub"></div>
+<div id="objpop"><div class="inner"></div><div class="hint">press <kbd>ENTER</kbd> to close</div></div>
 <div id="resume" class="screen"><div id="brief"></div><h2>CLICK TO RESUME</h2><p>It won't wait for you.</p></div>
 
 <div id="scare"></div>

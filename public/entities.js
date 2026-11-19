@@ -440,12 +440,12 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
   const smoke = addSmoke(root, S.glow);
   const eyes = root.userData.eyes || [];
   const glitch = { t: rr(2, 6), on: 0 };
-  Object.assign(root.userData, { bones: B, headObj: head, rag, inst, glow });
+  Object.assign(root.userData, { bones: B, headObj: head, rag, inst, glow, hands: { L: B.hand_L, R: B.hand_R } });
   const LR = [['_L', 1], ['_R', -1]];
   root.userData.update = (dt, speed, state, t) => {
     anim.phase += speed * dt * 2.3;
     const ph = anim.phase, moving = speed > 0.1, amp = Math.min(1, speed / 3);
-    const stare = state === 'stare';
+    const stare = state === 'stare', drag = state === 'drag'; // drag: the intro, pulling you along by the ankle
     const chase = state === 'chase', stall = state === 'stall' || stare, sniff = state === 'sniff', stun = state === 'stunned';
     if (glow) { glow.intensity = (stun ? 6 + Math.random() * 3 : chase ? 6 : 4) * (0.85 + Math.random() * 0.15); glow.color.setHex(stun ? 0xffffff : chase ? 0xc0c8ff : 0x9fb4ff); }
     for (const [sfx, s] of LR) {
@@ -455,7 +455,11 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
       // a chudail's feet point backwards
       pose(B['foot' + sfx], moving ? -Math.max(0, Math.cos(p)) * 0.3 * amp : 0, Math.PI);
       const pa = ph + (s > 0 ? 0 : Math.PI);
-      if (stun) {
+      if (drag && s > 0) { // left arm reaching back and down, gripping your ankle
+        pose(B['upperarm' + sfx], -0.5 + Math.sin(ph) * 0.05, 0, s * 0.12);
+        pose(B['forearm' + sfx], 0.12);
+        pose(B['fingers' + sfx], 1.0);
+      } else if (stun) {
         pose(B['upperarm' + sfx], 2.5 + Math.sin(t * 30 + s) * 0.1, 0, s * 0.35);
         pose(B['forearm' + sfx], 1.6);
         pose(B['fingers' + sfx], 0.9 + Math.sin(t * 40 + s) * 0.3);
@@ -474,7 +478,7 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
       }
       pose(B['shoulder' + sfx], 0, 0, chase ? s * 0.12 : 0);
     }
-    pose(B.spine, chase ? -0.28 : sniff ? -0.35 : 0, moving ? Math.sin(ph) * 0.06 : 0);
+    pose(B.spine, chase ? -0.28 : sniff ? -0.35 : drag ? -0.3 : 0, moving ? Math.sin(ph) * 0.06 : 0);
     pose(B.chest, chase ? -0.1 : 0, 0, moving ? Math.sin(ph) * 0.04 : 0);
     pose(B.neck, chase ? 0.3 : sniff ? 0.2 : 0);
     inst.position.y = moving ? Math.abs(Math.sin(ph)) * 0.05 * amp : Math.sin(t * 1.3) * 0.008;
@@ -641,8 +645,8 @@ export function createAvatar(name, color, charKey) {
     shown: true, xray,
     setShown(v) { if (this.shown === v) return; this.shown = v; this.body.traverse((o) => { if (o.isMesh || o.isSprite) o.visible = v; }); if (!v) this.beam.visible = false; },
     phase: 0, legs, arm, headPivot, beam, light, lens, label, body, glb,
-    setPose(pitch, fl, crouch, moving, dt, speed) {
-      if (this.glb) return this.glb.setPose(this, pitch, fl, crouch, moving, dt, speed);
+    setPose(pitch, fl, crouch, moving, dt, speed, air = 0) {
+      if (this.glb) return this.glb.setPose(this, pitch, fl, crouch, moving, dt, speed, air);
       this.arm.rotation.x = pitch; this.headPivot.rotation.x = pitch * 0.7;
       this.beam.visible = fl && this.shown; this.light.userData.on = fl; this.lens.material.color.set(fl ? 0xfff6e0 : 0x222222);
       const ty = crouch ? -0.45 : 0;
@@ -837,11 +841,12 @@ function animatedAvatar(body, arm, armM, gltf) {
   };
   return {
     inst: wrap, crouch: 0,
-    setPose(ud, pitch, fl, crouch, moving, dt, speed) {
+    setPose(ud, pitch, fl, crouch, moving, dt, speed, air = 0) {
       ud.arm.rotation.x = pitch;
       ud.beam.visible = fl && ud.shown; ud.light.userData.on = fl; ud.lens.material.color.set(fl ? 0xfff6e0 : 0x222222);
       if (!dead) {
-        if (moving && speed > 4.2 && act.run) fade(act.run, 1);
+        if (air > 0.02) fade(act.idle, 1); // no walking legs in mid-air
+        else if (moving && speed > 4.2 && act.run) fade(act.run, 1);
         else if (moving && act.walk) fade(act.walk, Math.max(0.45, speed / 3.1));
         else fade(act.idle, 1);
       }
@@ -850,14 +855,14 @@ function animatedAvatar(body, arm, armM, gltf) {
       if (bentLast) bentBones.forEach((b, i) => b.quaternion.copy(preQ[i]));
       mixer.update(dt);
       bentBones.forEach((b, i) => preQ[i].copy(b.quaternion));
-      const c = this.crouch;
-      bentLast = c > 0.01 && !dead;
+      const c = this.crouch, tk = dead ? 0 : air;
+      bentLast = (c > 0.01 || tk > 0.01) && !dead;
       if (bentLast) {
         const th = 1.05 * c;                       // knees bend, hips drop, feet stay flat
-        for (const b of CB.thighs) bend(b, -th);
-        for (const b of CB.shins) bend(b, th * 2);
-        for (const b of CB.feet) bend(b, -th);
-        bend(CB.spine[0], 0.3 * c); bend(CB.spine[1], 0.2 * c);
+        for (const b of CB.thighs) bend(b, -th - 0.95 * tk); // jumping: knees tucked up
+        for (const b of CB.shins) bend(b, th * 2 + 1.6 * tk);
+        for (const b of CB.feet) bend(b, -th - 0.45 * tk);
+        bend(CB.spine[0], 0.3 * c + 0.12 * tk); bend(CB.spine[1], 0.2 * c);
       }
       wrap.position.y = -0.85 * (1 - Math.cos(1.05 * c));
       if (!dead && CB.uarm) {
@@ -906,11 +911,11 @@ function upgradeAvatar(body, arm, armM, col) {
   body.add(inst);
   return {
     inst, phase: 0, crouch: 0,
-    setPose(ud, pitch, fl, crouch, moving, dt, speed) {
+    setPose(ud, pitch, fl, crouch, moving, dt, speed, air = 0) {
       ud.arm.rotation.x = pitch;
       ud.beam.visible = fl && ud.shown; ud.light.userData.on = fl; ud.lens.material.color.set(fl ? 0xfff6e0 : 0x222222);
       this.crouch += ((crouch ? 1 : 0) - this.crouch) * Math.min(1, dt * 10);
-      const c = this.crouch;
+      const c = Math.max(this.crouch, air * 0.7); if (air > 0.02) moving = false;
       if (moving) this.phase += dt * speed * 3.0;
       const a = moving ? Math.sin(this.phase) * 0.55 : 0;
       pose(B.thigh_L, a + c * 1.1); pose(B.thigh_R, -a + c * 1.1);

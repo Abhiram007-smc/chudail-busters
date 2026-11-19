@@ -369,6 +369,38 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
 - Tested with a headless bot on a separate port that keeps 10-14 m from her, looking at her, and breaks line of sight
   after each chase so the stare can trigger (bots only ever on test ports, never the live 3000).
 
+## 7f. Live drag scene, wake-up line + objectives, driving-away ending, direction signs, jump
+
+- **Drag scene is live** (`public/drag.js` `buildDrag`, replaces `video/drag.mp4` and `blender/build_drag.py`, both now
+  unused). Uses YOUR character (`createSeatedCharacter(char, 0, { knees: -1.5 })` = legs straight, laid on its back
+  with the feet in her left hand: `her.userData.hands.L`, new `drag` state in `upgradeMonster`) and the game's ghost.
+  Shots: S1 on the road by the wreck, she walks out of the headlight and bends over you (face reveal); S2 behind
+  you, dragged up the path with the house at the end; S3 your own eyes, legs, her back, porch steps, the door opening
+  on a lit hall; S4 inside the hall (wallpaper, chequered tiles, flickering bulb, writing), she comes in past the
+  camera, the door slams. 17 s. `playIntro` starts it 1.5 s after the crash (`startDrag`), sounds via `dragSound`,
+  black cuts via `drag.cover(t)`. `#intro` keeps class `live` so the canvas shows through. Test hooks:
+  `S.intro._toDrag()`, `window.__hm.dragLive`.
+- **Wake-up** (main.js): after the intro the click screen says CLICK TO WAKE UP (no briefing). On click (pointer
+  lock) `wakeUpSequence()`: 2.6 s later a subtitle `<name>: We're stuck in this house... we have to find a way
+  out.` (`#wakesub`, silent), then the objectives pop up (`#objpop`, same text as the briefing via
+  `showBriefing(target)`), Enter or 16 s closes it.
+- **Ending** (`buildOutro` in drag.js, `playOutro` in intro.js, `playEnding()` in main.js on your own `escaped`
+  event): the same car, wrecked (cracked windshield texture, one headlight dead, bumper hanging, smoke), everyone who
+  got out seated in it, she watches from the lit doorway. O1 front of the car pulling away, O2 dashboard looking back
+  (silent line "Don't look back. Just drive."), O3 wide over the road, sky greying, white. 13.6 s, Space-hold/Esc
+  skips. If the game `end` arrives meanwhile it waits (`S.pendingEnd`). The car GLB is fetched when the stage turns
+  to `escape` (`outroCar()`), or reused from the intro.
+- **Direction signs** (world.js): at corridor junctions (>= 3 open sides, >= 4 cells apart, <= 14 per floor) an
+  enamel sign on the wall lists STAIRS / SHRINE (basement) / EXIT (ground floor) with an arrow, from a BFS distance
+  field per destination (only destinations whose next step runs along that wall). Top floor: stairs = cells beside
+  the stairwell opening (type 4). Room name plates above doors were already there.
+- **Jump** (Space): `JUMP = { v: 4.4, g: 13 }` (~0.74 m, ~0.68 s), costs 10 stamina, landing thump + camera dip,
+  no footsteps in the air. Client sends `{t:'jump'}`; server relays `ev jump {id}`; other clients play the same arc
+  (`r.jt`, `jumpArc`) and pass `air` (0..1) to `setPose(...)` so the avatar tucks its knees (animated GLB avatars and
+  the survivor rig) and stops the walk cycle in the air. Spectator camera follows the arc.
+- Intro safety cap is now 120 s and cuts to the crash (the drag scene still plays) instead of skipping it all;
+  server `INTRO_S` = 95. Full real-speed run: video 5-21 s, car 21-71 s, drag 71-91 s, wake screen at 92 s.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

@@ -430,6 +430,72 @@ export function buildWorld(scene, map) {
     sign.receiveShadow = true; lvl(d.L).add(sign); cullable(sign, bx, bz);
   }
 
+  // ---------- direction signs at corridor junctions: the way to the stairs, the shrine and the way out ----------
+  {
+    const W = map.W, Hh = map.H, walk = (L, i, j) => { const t = (i >= 0 && j >= 0 && i < W && j < Hh) ? map.grid[L][j * W + i] : 0; return t === 1 || t === 2 || t === 3; };
+    const solid = (L, i, j) => !(i >= 0 && j >= 0 && i < W && j < Hh) || map.grid[L][j * W + i] === 0;
+    const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const field = (L, starts) => { // BFS distance (in cells) to the nearest start cell on this floor
+      const d = new Int32Array(W * Hh).fill(-1), q = [];
+      for (const [i, j] of starts) if (walk(L, i, j) && d[j * W + i] < 0) { d[j * W + i] = 0; q.push(i, j); }
+      for (let h = 0; h < q.length; h += 2) { const i = q[h], j = q[h + 1]; for (const [a, b] of N4) { const ni = i + a, nj = j + b; if (walk(L, ni, nj) && d[nj * W + ni] < 0) { d[nj * W + ni] = d[j * W + i] + 1; q.push(ni, nj); } } }
+      return d;
+    };
+    const cellAt = (x, z) => [Math.floor(x / CELL), Math.floor(z / CELL)];
+    const near = (L, x, z) => { const [i, j] = cellAt(x, z); for (const [a, b] of [[0, 0], ...N4]) if (walk(L, i + a, j + b)) return [[i + a, j + b]]; return []; };
+    const texCache = new Map();
+    const dirTex = (lines) => {
+      const key = lines.join('|'); if (texCache.has(key)) return texCache.get(key);
+      const c = TX.canvas(512, 64 + lines.length * 72), g = c.getContext('2d');
+      g.fillStyle = '#1b2b26'; g.fillRect(0, 0, c.width, c.height);
+      g.strokeStyle = '#cfc8ad'; g.lineWidth = 5; g.strokeRect(9, 9, c.width - 18, c.height - 18);
+      g.fillStyle = '#e2dabd'; g.font = '50px "IM Fell English SC", "Courier Prime", serif'; g.textBaseline = 'middle';
+      lines.forEach((ln, k) => { const y = 66 + k * 72; const left = ln.startsWith('←'); g.textAlign = left ? 'left' : 'right'; g.fillText(ln, left ? 34 : c.width - 34, y); });
+      for (let k = 0; k < 16; k++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(20,14,8,0.8)' : 'rgba(110,55,20,0.5)'; g.beginPath(); g.arc(Math.random() * c.width, Math.random() * c.height, 2 + Math.random() * 7, 0, 7); g.fill(); }
+      const t = TX.toTex(c, { repeat: false }); texCache.set(key, t); return t;
+    };
+    for (const L of LEVELS) {
+      if (!map.grid[L]) continue;
+      const dests = [];
+      const stairs = []; for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) if (map.grid[L][j * W + i] === 3) stairs.push([i, j]);
+      if (!stairs.length) { // top floor: the stairs arrive through an opening in the floor; aim for the landing beside it
+        for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) if (map.grid[L][j * W + i] === 4) for (const [a, b] of N4) if (walk(L, i + a, j + b)) stairs.push([i + a, j + b]);
+      }
+      if (stairs.length) dests.push({ label: 'STAIRS', d: field(L, stairs) });
+      if (map.shrine && map.shrine.L === L) dests.push({ label: 'SHRINE', d: field(L, near(L, map.shrine.x, map.shrine.z)) });
+      if (map.exit && (map.exit.L ?? 0) === L) dests.push({ label: 'EXIT', d: field(L, near(L, map.exit.x + CELL * 0.5, map.exit.z)) });
+      if (!dests.length) continue;
+      const placed = [];
+      for (let j = 1; j < Hh - 1; j++) for (let i = 1; i < W - 1; i++) {
+        if (map.grid[L][j * W + i] !== 2 || placed.length >= 14) continue;
+        const open = N4.filter(([a, b]) => walk(L, i + a, j + b)).length;
+        if (open < 3 || placed.some(([a, b]) => Math.max(Math.abs(a - i), Math.abs(b - j)) < 4)) continue;
+        // the best wall: the one whose sign can point along the most destinations
+        let best = null;
+        for (const [wx, wz] of N4) {
+          if (!solid(L, i + wx, j + wz)) continue;
+          const lines = [];
+          for (const ds of dests) {
+            const here = ds.d[j * W + i]; if (here <= 1) continue;
+            let step = null; for (const [a, b] of N4) { const v = walk(L, i + a, j + b) ? ds.d[(j + b) * W + i + a] : -1; if (v >= 0 && v < here && (!step || v < step[2])) step = [a, b, v]; }
+            if (!step) continue;
+            const side = step[0] * -wz + step[1] * wx; // + = to the right of someone facing this wall
+            if (Math.abs(side) > 0.5) lines.push(side > 0 ? `${ds.label}  →` : `←  ${ds.label}`);
+          }
+          if (lines.length && (!best || lines.length > best.lines.length)) best = { wx, wz, lines };
+        }
+        if (!best) continue;
+        placed.push([i, j]);
+        const hgt = 0.14 + best.lines.length * 0.16;
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.05, hgt), new THREE.MeshStandardMaterial({ map: dirTex(best.lines), roughness: 0.55, metalness: 0.15 }));
+        const x = (i + 0.5) * CELL + best.wx * (CELL / 2 - 0.03), z = (j + 0.5) * CELL + best.wz * (CELL / 2 - 0.03);
+        sign.position.set(x, 1.85, z); sign.rotation.y = Math.atan2(-best.wx, -best.wz); sign.rotation.z = (rng() - 0.5) * 0.05;
+        lvl(L).add(sign); cullable(sign, x, z);
+      }
+      world.dirSigns = (world.dirSigns || 0) + placed.length;
+    }
+  }
+
   // ---------- notes ----------
   world.notes = new Map();
   const noteTex = TX.toTex(TX.paperCanvas(), { repeat: false });

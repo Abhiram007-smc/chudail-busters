@@ -11,9 +11,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createSeatedCharacter } from './entities.js';
+import { buildDrag, buildOutro } from './drag.js';
 
 const VIDEO_URL = '/video/intro.mp4';
-export const INTRO = { black: 2.8, dragAfter: 1.5, maxSeconds: 95 };
+export const INTRO = { black: 2.8, dragAfter: 1.5, maxSeconds: 120 };
 const SPEED = 15; // m/s, the car
 const TRUCK_V = 19; // m/s, the truck
 // truck sequence, seconds after the camera turns to the windshield
@@ -28,9 +29,7 @@ export function preloadIntro() {
     fetch(VIDEO_URL).then((r) => { if (!r.ok) throw new Error('intro video ' + r.status); return r.blob(); }),
     loader.loadAsync('/models/intro_car.glb'),
     loader.loadAsync('/models/intro_truck.glb'),
-    // after the crash she drags you to the house (rendered in Blender: blender/build_drag.py); optional
-    fetch('/video/drag.mp4').then((r) => (r.ok ? r.blob() : null)).catch(() => null),
-  ]).then(([blob, car, truck, drag]) => ({ videoURL: URL.createObjectURL(blob), car: car.scene, truck: truck.scene, dragURL: drag ? URL.createObjectURL(drag) : null }))
+  ]).then(([blob, car, truck]) => ({ videoURL: URL.createObjectURL(blob), car: car.scene, truck: truck.scene }))
     .catch((e) => { console.warn('intro unavailable:', e.message); pre = null; return null; });
   return pre;
 }
@@ -512,7 +511,7 @@ function buildLive(assets, players, hooks = {}) {
 
 // ---------------------------------------------------------------- the whole sequence
 export { buildLive as _buildLive, buildDialogue as _buildDialogue };
-export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
+export function playIntro({ renderer, assets, players, meId, audio, calm, onDone }) {
   const el = document.getElementById('intro');
   const video = el.querySelector('video');
   const fade = el.querySelector('.ifade');
@@ -596,7 +595,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     if (!skipped) {
       setTimeout(() => { fade.style.transition = 'background 0.5s'; fade.style.background = '#000'; }, 90);
       setTimeout(() => snd?.ring(), 700);
-      if (assets.dragURL) { setTimeout(startDrag, INTRO.dragAfter * 1000); return; } // ...then she comes for you
+      setTimeout(startDrag, INTRO.dragAfter * 1000); return; // ...then she comes for you
     } else snd?.stop();
     setTimeout(() => {
       if (aborted) return;
@@ -607,33 +606,37 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
       onDone();
     }, skipped ? 400 : INTRO.black * 1000);
   }
-  // ---- after the crash: she drags you through the snow into the house (blender/build_drag.py, 24 fps)
-  let dragDone = false;
-  const dragCues = [];
+  // ---- after the crash: she drags you through the snow into the house (live scene, public/drag.js)
+  let dragDone = false, drag = null, dragT = 0;
   function startDrag() {
     if (aborted || dragDone) return;
-    phase = 'drag';
     live?.dispose(); live = null;
-    el.classList.remove('live');
-    video.onended = () => endDrag(false); video.onerror = () => endDrag(false);
-    video.onplaying = () => { fade.style.transition = 'opacity 1.4s'; fade.style.opacity = 0; };
-    video.src = assets.dragURL; video.currentTime = 0;
-    const dc = (at, fn) => dragCues.push({ at, fn });
-    [1.0, 1.7, 2.35, 2.95].forEach((s, k) => dc(s, () => snd?.crunch(0.18 + k * 0.07))); // she walks up to you
-    dc(3.55, () => snd?.scrape(true));
-    for (let s = 3.6; s < 9.2; s += 0.68) dc(s, () => snd?.crunch(0.32));
-    dc(9.2, () => snd?.scrape(false));
-    [9.27, 9.51, 9.75, 9.99, 10.2].forEach((s) => dc(s, () => snd?.thud()));
-    dc(10.2, () => snd?.creak());
-    video.play().catch(() => endDrag(false));
+    video.pause(); el.classList.add('live'); // the 3D view shows through
+    const me = players.find((p) => p.id === meId) || players[0];
+    try { drag = buildDrag({ assets, charKey: me && me.char }); } catch (e) { console.warn('drag scene failed', e); endDrag(false); return; }
+    if (window.__hm) window.__hm.dragLive = drag; // for automated tests
+    phase = 'drag'; dragT = 0;
+    fade.style.transition = 'none';
+  }
+  function dragSound(ev) {
+    if (ev === 'step') snd?.crunch(0.25);
+    else if (ev === 'crunch') snd?.crunch(0.32);
+    else if (ev === 'thud') snd?.thud();
+    else if (ev === 'stepThud') snd?.thud();
+    else if (ev === 'scrapeOn') snd?.scrape(true);
+    else if (ev === 'scrapeOff') snd?.scrape(false);
+    else if (ev === 'creak') snd?.creak();
+    else if (ev === 'wood') snd?.crunch(0.12);
+    else if (ev === 'slam') snd?.slam();
   }
   function endDrag(skipped) {
     if (dragDone) return;
     dragDone = true; phase = 'black';
     fade.style.transition = skipped ? 'opacity 0.25s' : 'none'; fade.style.opacity = 1; fade.style.background = '#000';
-    if (!skipped) snd?.slam(); snd?.scrape(false);
+    snd?.scrape(false);
     setTimeout(() => {
       if (aborted) return;
+      drag?.dispose(); drag = null;
       video.pause(); video.removeAttribute('src'); video.load();
       el.className = ''; removeEventListener('keydown', kd); removeEventListener('keyup', ku);
       setTimeout(() => snd?.stop(), skipped ? 0 : 2500);
@@ -647,6 +650,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     try { speechSynthesis.cancel(); } catch {}
     if (done && !live && el.className === '') return;
     done = true; dragDone = true; snd?.stop();
+    drag?.dispose(); drag = null;
     video.pause(); video.removeAttribute('src'); video.load();
     live?.dispose(); live = null;
     el.className = ''; removeEventListener('keydown', kd); removeEventListener('keyup', ku);
@@ -662,9 +666,17 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     frame() {
       // real time, so a throttled or background tab doesn't stretch the intro (the ghost wakes up on the server's clock)
       const nowMs = performance.now(); const rdt = Math.min(0.25, (nowMs - lastNow) / 1000); lastNow = nowMs;
-      if (!dragDone && nowMs - started > INTRO.maxSeconds * 1000) { skipAll(); return; }
+      // a safety net: running far too long (very slow machine): cut to the crash, but still show the drag scene
+      if (!done && nowMs - started > INTRO.maxSeconds * 1000) { finish(false); return; }
       if (holding) { holdT += rdt; if (holdT > 0.7) { holding = false; skipAll(); } } else holdT = Math.max(0, holdT - rdt * 2);
-      if (phase === 'drag') { for (const c of dragCues) if (!c.fired && video.currentTime >= c.at) { c.fired = true; c.fn(); } return; }
+      if (phase === 'drag' && drag) {
+        dragT += rdt;
+        drag.update(dragT, rdt).forEach(dragSound);
+        fade.style.opacity = drag.cover(dragT);
+        renderer.render(drag.scene, drag.cam);
+        if (dragT >= drag.duration) endDrag(false);
+        return;
+      }
       skipEl.style.setProperty('--p', Math.min(1, holdT / 0.7));
       const clock = phase === 'video' ? video.currentTime : vidLen + t;
       for (const c of cues) if (!c.fired && clock >= c.at) { c.fired = true; c.fn(); }
@@ -679,5 +691,54 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     },
     skip: skipAll,
     abort,
+    _toDrag() { if (phase === 'drag' || dragDone) return; done = true; phase = 'black'; startDrag(); }, // tests
+  };
+}
+
+// ---------------------------------------------------------------- the ending: driving away from Ashgrove
+// Everyone who got out is in the (wrecked) car; it pulls away from the house and onto the road. public/drag.js buildOutro.
+export function playOutro({ renderer, assets, players, meId, audio, onDone }) {
+  const el = document.getElementById('intro');
+  const video = el.querySelector('video'), fade = el.querySelector('.ifade'), sub = el.querySelector('.isub');
+  const snd = introSound(audio);
+  let o;
+  try { o = buildOutro({ assets, players, meId }); } catch (e) { console.warn('outro failed', e); onDone(); return null; }
+  el.className = 'show live'; video.pause();
+  fade.style.transition = 'none'; fade.style.opacity = 1; fade.style.background = '#000';
+  sub.innerHTML = ''; sub.style.opacity = 0;
+  const me = players.find((p) => p.id === meId) || players[0];
+  let t = 0, last = performance.now(), done = false, holding = false, holdT = 0, cued = {};
+  const once = (k, at, fn) => { if (!cued[k] && t >= at) { cued[k] = true; fn(); } };
+  function finish(skipped) {
+    if (done) return; done = true;
+    fade.style.transition = skipped ? 'opacity .25s' : 'background 1.2s'; fade.style.opacity = 1;
+    fade.style.background = skipped ? '#000' : '#fff';
+    snd?.stop();
+    setTimeout(() => {
+      o.dispose(); el.className = ''; sub.style.opacity = 0;
+      removeEventListener('keydown', kd); removeEventListener('keyup', ku);
+      onDone();
+    }, skipped ? 350 : 1300);
+  }
+  const kd = (e) => { if (e.code === 'Space') { holding = true; e.preventDefault(); } if (e.code === 'Escape') finish(true); };
+  const ku = (e) => { if (e.code === 'Space') holding = false; };
+  addEventListener('keydown', kd); addEventListener('keyup', ku);
+  return {
+    outro: true,
+    frame() {
+      if (done) return;
+      const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; t += dt;
+      if (holding) { holdT += dt; if (holdT > 0.7) { finish(true); return; } } else holdT = 0;
+      once('crank', 1.2, () => { snd?.crunch(0.2); snd?.start(); });
+      once('say', 5.4, () => { sub.innerHTML = `<b style="color:#ffd27a">${String(me?.name || '').replace(/[<>&]/g, '')}</b> Don't look back. Just drive.`; sub.style.opacity = 1; });
+      once('unsay', 8.6, () => (sub.style.opacity = 0));
+      const ev = o.update(t, dt);
+      const w = o.white(t);
+      if (w > 0) { fade.style.background = '#fff'; fade.style.opacity = w; } else fade.style.opacity = o.cover(t);
+      renderer.render(o.scene, o.cam);
+      if (ev.includes('end')) finish(false);
+    },
+    abort() { if (!done) { done = true; snd?.stop(); o.dispose(); el.className = ''; removeEventListener('keydown', kd); removeEventListener('keyup', ku); } },
+    skip() { finish(true); },
   };
 }

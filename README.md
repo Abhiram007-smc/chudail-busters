@@ -38,9 +38,23 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 ## The intro
 
 Every game starts with a cut scene: you and your friends are driving up a snowy mountain road at night. The street
-lights flicker and die one by one. Then a truck's lights come out of the dark, in your lane. Then she comes out of the dark and drags you by the ankle through the snow, up the porch steps and into the
-house. When you wake up, you are lying on its floor. The outside shots are a movie rendered in Blender; the inside of the car is played
-live, so **everyone's chosen character is sitting in the car** (the first player drives). In co-op the friends chat about their holiday plan on the way (spoken, with subtitles, using your player names) until the lights start dying. Hold **Space** to skip it.
+lights flicker and die one by one. Then a truck's lights come out of the dark, in your lane. Then she comes out of the
+dark, bends over you where you lie on the road, and drags **your own character** by the ankle through the snow, up the
+porch steps and into the house's hallway; the door slams. When you wake up you say *"We're stuck in this house... we
+have to find a way out"* and your objectives pop up. The outside shots are a movie rendered in Blender; the inside of
+the car and the drag are played live, so **everyone's chosen character is in it** (the first player drives). In
+co-op the friends chat about their holiday plan on the way (silent, subtitles only, using your player names). Hold
+**Space** to skip it.
+
+## The ending
+
+Get out through the front door and you drive away in the same car, wrecked from the crash, with everyone who made it
+out; she watches you go from the doorway.
+
+## Finding your way
+
+Every room has its name above the door, and enamel signs at the corridor junctions point to the **STAIRS**, the
+**SHRINE** (basement) and the **EXIT** (ground floor).
 
 ## Difficulty
 
@@ -79,6 +93,7 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 | Shift | sprint (any direction). **She hears you from far away.** |
 | Ctrl (or Alt) + move | sneak: slow and completely silent |
 | C | crouch: completely silent; with your light off she can walk right past you |
+| Space | jump (everyone sees it) |
 | F | flashlight (the battery drains; find spare batteries) |
 | E | take, read notes, place items on the star, hide in lockers, wardrobes and under beds, revive a friend (hold) |
 | Q | ring a **spirit bell**: freezes her for 6 seconds and scares the Crawler away |
@@ -129,10 +144,10 @@ To rebuild the Blender models:
   - "Adventurer", "Hoodie Character", "Woman", "Man", "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
-- Intro car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
+- Intro and ending car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
 - Footsteps: "Different steps on wood, stone, leaves, gravel and mud" by **TinyWorlds** ([OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)), CC0
 - Horn in the intro: "Car Horn.wav" by **15HPanska_Ruttner_Jan** (Wikimedia Commons), CC0
-- After the crash: the Chudail dragging you to the house is rendered in Blender from the game's own Chudail model (`blender/build_drag.py`)
+- After the crash: the drag into the house and the ending are live three.js scenes (`public/drag.js`) with the game's own characters and Chudail
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0
 - The Chudail and the Crawler: modeled with a script in Blender for this game
 - Fonts: Creepster, Eczar, Kalam, IM Fell English SC, Courier Prime, Homemade Apple, Rubik Wet Paint, Nosifer (Google Fonts, OFL)
