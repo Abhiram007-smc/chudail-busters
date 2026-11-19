@@ -21,7 +21,7 @@ const CHARS = ['adventurer', 'soldier', 'hoodie', 'woman', 'man', 'punk', 'casua
 // ---------------- static files ----------------
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
-  '.json': 'application/json', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.json': 'application/json', '.mp4': 'video/mp4', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 const ROOTS = [
   ['/vendor/three/', path.join(__dirname, 'node_modules/three/')],
@@ -72,6 +72,7 @@ const spectators = new Set(); // hidden admins: receive everything, invisible to
 const broadcast = (msg) => { const s = JSON.stringify(msg); for (const p of game.players.values()) if (p.ws.readyState === 1) p.ws.send(s); for (const w of spectators) if (w.readyState === 1) w.send(s); };
 const now = () => game.time;
 const rand = (a, b) => a + Math.random() * (b - a);
+const INTRO_S = 30; // the intro cut scene (public/intro.js) runs ~29 s; she stays asleep through it
 const frontOf = (h) => (h.type === 'bed' ? 1.55 : 0.95); // where you stand in front of a hiding spot
 const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -87,7 +88,7 @@ function freeColor() {
 
 function startMsg() {
   return {
-    t: 'start', seed: game.seed, sig: mapSignature(game.map), difficulty: game.difficulty,
+    t: 'start', seed: game.seed, intro: now() - game.startTime < 4, sig: mapSignature(game.map), difficulty: game.difficulty,
     players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char, x: p.x, z: p.z, L: p.L, alive: p.alive, escaped: p.escaped, items: p.items })),
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
     moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
@@ -108,7 +109,7 @@ function startGame() {
   game.progress = 0; game.placed = [null, null, null, null, null];
   game.exitOpen = false; game.sniffed = {}; game.stage = 'items';
   game.crawler = { x: 0, z: 0, L: 0, yaw: 0, state: 'gone', t: now() + 20, target: null, path: null, pathT: -9, pi: 0 };
-  game.startTime = now(); game.nextScare = now() + 45 + Math.random() * 25;
+  game.startTime = now(); game.nextScare = now() + 45 + INTRO_S + Math.random() * 25;
   let n = 0;
   for (const p of game.players.values()) spawnPlayer(p, n++);
   game.monster = {
@@ -230,7 +231,7 @@ function updateMonster(dt) {
   const t = now(), d = D();
   const targets = activePlayers();
   if (m.state === 'bound') { m.speed = 0; m.lit = false; return; }
-  if (t < game.startTime + 18) { m.state = 'dormant'; m.speed = 0; return; }
+  if (t < game.startTime + 18 + INTRO_S) { m.state = 'dormant'; m.speed = 0; return; }
   if (!targets.length) return;
   if (m.state === 'dormant') { m.state = 'wander'; m.goal = null; }
 

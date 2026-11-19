@@ -616,6 +616,79 @@ export function createAvatar(name, color, charKey) {
 }
 
 // downloaded, pre-animated character (Quaternius, CC0 / CC-BY)
+// A player's character sitting in the car for the intro cut scene (public/intro.js). Uses the character's own
+// sitting animation when it has one, otherwise idle with the legs bent into a seat. update(dt, t, fear, look):
+// look 0..1 lets the head wander, fear 0..1 throws the arms up in front of the face.
+export function createSeatedCharacter(key, seed = 0) {
+  const gltf = ANIMATED[key] || ANIMATED[DEFAULT_CHARS[0]];
+  if (!gltf) return null;
+  const inst = SkeletonUtils.clone(gltf.scene);
+  const mixer = new THREE.AnimationMixer(inst);
+  const find = (re) => gltf.animations.find((a) => re.test(a.name));
+  const idle = find(/[|_]Idle$/) || find(/Idle/), sit = find(/Sitting$/);
+  inst.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    o.material = ms.map((m) => { const c = m.clone(); c.roughness = 0.8; c.metalness = 0; return c; });
+    if (o.material.length === 1) o.material = o.material[0];
+  });
+  if (idle) mixer.clipAction(idle).play();
+  mixer.update(0); inst.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(inst, true);
+  const k = 1.68 / ((box.max.y - box.min.y) || 1);
+  mixer.stopAllAction();
+  const act = mixer.clipAction(sit || idle);
+  if (act) { act.play(); act.time = (seed * 0.61) % act.getClip().duration; }
+  inst.updateMatrixWorld(true);
+  const bn = {}; const wq = new THREE.Quaternion();
+  inst.traverse((o) => {
+    if (!o.isBone) return;
+    o.getWorldQuaternion(wq); wq.invert();
+    o.userData.axX = new THREE.Vector3(1, 0, 0).applyQuaternion(wq);
+    o.userData.axY = new THREE.Vector3(0, 1, 0).applyQuaternion(wq);
+    bn[o.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = o;
+  });
+  const pick = (...n) => n.map((x) => bn[x]).find(Boolean);
+  const B = {
+    thighs: [pick('upperlegl', 'leftupleg'), pick('upperlegr', 'rightupleg')],
+    shins: [pick('lowerlegl', 'leftleg'), pick('lowerlegr', 'rightleg')],
+    uarms: [pick('upperarml', 'leftarm'), pick('upperarmr', 'rightarm')],
+    farms: [pick('lowerarml', 'leftforearm'), pick('lowerarmr', 'rightforearm')],
+    head: pick('head'), neck: pick('neck'), hips: pick('hips'),
+  };
+  const bent = [...B.thighs, ...B.shins, ...B.uarms, ...B.farms, B.head, B.neck].filter(Boolean);
+  const pre = bent.map((b) => b.quaternion.clone());
+  const turn = (b, ax, a) => { if (b && a) b.quaternion.multiply(_q.setFromAxisAngle(b.userData[ax], a)); };
+  const wrap = new THREE.Group(); wrap.add(inst); inst.scale.multiplyScalar(k); wrap.rotation.y = Math.PI;
+  const root = new THREE.Group(); root.add(wrap);
+  const ph = seed * 1.9;
+  const api = {
+    root,
+    update(dt, t, fear = 0, look = 1) {
+      bent.forEach((b, i) => b.quaternion.copy(pre[i]));
+      mixer.update(dt);
+      bent.forEach((b, i) => pre[i].copy(b.quaternion));
+      if (!sit) { for (const b of B.thighs) turn(b, 'axX', -1.5); for (const b of B.shins) turn(b, 'axX', 1.55); }
+      // glancing around, out of the windows; at the end everyone stares ahead
+      const g = (Math.sin(t * 0.55 + ph) * 0.45 + Math.sin(t * 1.7 + ph * 2) * 0.12) * look * (1 - fear);
+      turn(B.neck, 'axY', g * 0.5); turn(B.head, 'axY', g * 0.6);
+      if (fear > 0) { // arms up in front of the face
+        B.uarms.forEach((b, i) => { turn(b, 'axX', -1.7 * fear); turn(b, 'axY', (i ? -0.5 : 0.5) * fear); });
+        B.farms.forEach((b) => turn(b, 'axX', -1.1 * fear));
+        turn(B.head, 'axX', 0.25 * fear);
+      }
+    },
+    placeHips(target) { // move the whole character so its hip bone sits on the seat
+      api.update(0, 0); root.updateMatrixWorld(true);
+      const h = new THREE.Vector3(); (B.hips || inst).getWorldPosition(h);
+      root.position.add(target.clone().sub(h));
+    },
+    dispose() { mixer.stopAllAction(); },
+  };
+  return api;
+}
+
 function animatedAvatar(body, arm, armM, gltf) {
   const inst = SkeletonUtils.clone(gltf.scene);
   const mixer = new THREE.AnimationMixer(inst);

@@ -9,6 +9,7 @@ import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
 import * as TX from './textures.js';
+import { preloadIntro, playIntro } from './intro.js';
 
 const $ = (id) => document.getElementById(id);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -285,7 +286,10 @@ $('resume').onclick = () => { audio.init(); canvas.requestPointerLock(); };
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;
   if (S.phase === 'playing' && !locked) showScreen('resume');
-  else if (S.phase === 'playing' && locked) { showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME'; }
+  else if (S.phase === 'playing' && locked) {
+    showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME';
+    if (S.wakePending && S.me) { S.wakePending = false; S.me.wake = 0; $('eyes').className = 'open'; canvas.style.transition = 'filter 4.5s ease-out'; canvas.style.filter = 'blur(9px) brightness(0.6)'; requestAnimationFrame(() => requestAnimationFrame(() => (canvas.style.filter = ''))); setTimeout(() => { canvas.style.transition = ''; $('eyes').className = ''; }, 5200); }
+  }
 });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -350,7 +354,11 @@ function startGame(m) {
   const go = () => { if (loadFx) loadFx.done = true; setTimeout(() => buildGame(m), Math.max(250, 4200 - (performance.now() - t0))); };
   const fonts = Promise.all(['64px "IM Fell English SC"', 'bold 54px "Courier Prime"', '92px "Rubik Wet Paint"', '20px "Homemade Apple"'].map((f) => document.fonts.load(f).catch(() => {})));
   const chars = Promise.all(m.players.map((p) => ensureChar(p.char)));
-  Promise.race([Promise.all([loadModels(), fonts, chars]), new Promise((r) => setTimeout(r, 9000))]).then(() => setTimeout(go, 30));
+  // the intro cut scene plays only at the very start of a game (not for late joiners or hidden spectators)
+  S.introAssets = null;
+  const wantIntro = m.intro && !S.spectator;
+  const intro = wantIntro ? preloadIntro().then((a) => (S.introAssets = a)) : null;
+  Promise.race([Promise.all([loadModels(), fonts, chars, intro]), new Promise((r) => setTimeout(r, wantIntro ? 25000 : 9000))]).then(() => setTimeout(go, 30));
 }
 
 function buildGame(m) {
@@ -451,16 +459,33 @@ function buildGame(m) {
   $('specHud').style.display = S.spectator ? 'block' : 'none';
   setObjective();
   warmUp(scene);
-  audio.init(); audio.startAmbience(); audio.startMonsterVoice();
+  audio.init();
   stopLoadingFx();
+  if (S.introAssets && m.intro && !S.spectator) {
+    // the drive, the truck... then you wake up on the floor of the house
+    showScreen(''); $('hud').classList.remove('show');
+    S.intro = playIntro({
+      renderer, assets: S.introAssets, audio, calm: FX.calm,
+      players: [...m.players].sort((a, b) => a.id - b.id),
+      onDone: () => { S.intro = null; $('hud').classList.add('show'); enterHouse(m, true); },
+    });
+    return;
+  }
+  enterHouse(m, false);
+}
+
+function enterHouse(m, woke) {
+  audio.startAmbience(); audio.startMonsterVoice();
+  if (woke && S.me && !S.spectator) { S.me.eye = 0.3; S.wakePending = true; } // lying on the floor until you click in
+  else fxFace(70, 0.7);
   // the door shuts behind you
-  fxFace(70, 0.7); fxFlash('#7a0000', 0.8, 700); audio.stinger(0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1);
+  fxFlash('#7a0000', woke ? 0.4 : 0.8, 700); audio.stinger(woke ? 0.35 : 0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1);
   showScreen('resume');
   $('resume').querySelector('h2').textContent = 'CLICK TO ENTER';
   if (!S.spectator) showBriefing(); else $('brief').style.display = 'none';
   if (!S.spectator) setTimeout(() => {
     if (S.mapBad) { message('This page is out of date with the server. Refresh the page (Ctrl/Cmd + Shift + R).', 'red'); return; }
-    message('The front door slammed shut behind you.');
+    message(woke ? 'You wake up on a cold floor. The car... the truck... where are the others?' : 'The front door slammed shut behind you.');
     setTimeout(() => message('The star in the basement wants five gifts. Find the riddles.', 'red'), 2500);
   }, 1200);
 }
@@ -499,6 +524,7 @@ function addPlayer(p) {
 }
 
 function leaveGame() {
+  if (S.intro) { S.intro.abort(); S.intro = null; }
   if (document.pointerLockElement) document.exitPointerLock();
   $('hud').classList.remove('show');
   if (S.scene) { disposeScene(S.scene); S.scene = null; }
@@ -771,6 +797,7 @@ function addBlood(x, z, L = 0) {
 }
 
 function onEnd(m) {
+  if (S.intro) { S.intro.abort(); S.intro = null; $('hud').classList.add('show'); }
   S.phase = 'ended';
   if (document.pointerLockElement) document.exitPointerLock();
   audio.setChase(false);
@@ -1145,7 +1172,13 @@ function updatePlayer(dt, t) {
   // field-of-view kick so sprinting feels fast
   const fovT = me.sprint && me.moving ? 82 : 72;
   if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix(); }
-  const eyeT = me.crouch ? 1.05 : 1.62;
+  let eyeT = me.crouch ? 1.05 : 1.62;
+  if (me.wake != null) { // getting up off the floor after the crash
+    me.wake += dt;
+    const k = Math.min(1, Math.max(0, (me.wake - 1.6) / 2.4));
+    eyeT = 0.3 + (eyeT - 0.3) * k * k * (3 - 2 * k);
+    if (me.wake > 4.2) me.wake = null;
+  } else if (S.wakePending) eyeT = 0.3;
   me.eye += (eyeT - me.eye) * Math.min(1, dt * 9);
   const sh = S.shake;
   const floorY = heightAt(map, me.L, me.x, me.z);
@@ -1554,6 +1587,7 @@ function frame(now) {
   const t = now / 1000;
   if (S.phase === 'menu' || S.phase === 'lobby' || S.phase === 'joining') { drawGrain(); return; }
   if (S.phase !== 'playing' || !S.scene || !S.me) { if (S.composer && S.scene) S.composer.render(dt); return; }
+  if (S.intro) { if (!S.me.alive && !S.spectator) { S.intro.abort(); S.intro = null; } else { S.intro.frame(); return; } }
   const me = S.me;
   if (S.reading && (!me.alive || (S.mon.state === 'chase' && S.mon.target === S.myId))) closeNote();
   if (!S.spectator && S.spectating === null) S.camL = me.L;

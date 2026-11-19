@@ -158,6 +158,24 @@
   #loading .lbar b { position: absolute; top: 2px; width: 3px; border-radius: 0 0 3px 3px; background: #8a0b0b; animation: drip 3.5s ease-in infinite; }
   #loading .lhint { position: absolute; bottom: 26px; width: 100%; text-align: center; font-size: 11px; letter-spacing: .4em; color: #4a443c; text-transform: uppercase; }
   #loading .lwarn { position: absolute; top: 22px; width: 100%; text-align: center; font-size: 11px; letter-spacing: .25em; color: #5a3a34; text-transform: uppercase; }
+  /* ---------- intro cut scene ---------- */
+  #intro { position: fixed; inset: 0; z-index: 45; display: none; background: #000; }
+  #intro.show { display: block; }
+  #intro.live { background: transparent; }
+  #intro video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #intro.live video { display: none; }
+  #intro .ibars { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#000 0 9vh, transparent 9vh calc(100% - 9vh), #000 calc(100% - 9vh)); }
+  #intro .ifade { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; }
+  #intro .iskip { position: absolute; right: 26px; bottom: calc(9vh + 14px); font-size: 11px; letter-spacing: .3em; color: rgba(220,210,190,.45); }
+  #intro .iskip i { display: inline-block; width: 60px; height: 2px; margin-left: 8px; vertical-align: middle; background: linear-gradient(90deg, #a00 calc(var(--p, 0) * 100%), rgba(255,255,255,.15) 0); }
+  /* waking up: eyelids blink open */
+  #eyes { position: fixed; inset: 0; z-index: 8; pointer-events: none; display: none; }
+  #eyes.open { display: block; }
+  #eyes b { position: absolute; left: -5%; width: 110%; height: 52%; background: #000; border-radius: 0 0 50% 50% / 0 0 30% 30%; }
+  #eyes b:first-child { top: 0; animation: lidTop 4.6s ease-in-out forwards; }
+  #eyes b:last-child { bottom: 0; border-radius: 50% 50% 0 0 / 30% 30% 0 0; animation: lidBot 4.6s ease-in-out forwards; }
+  @keyframes lidTop { 0% { transform: translateY(0) } 18% { transform: translateY(-62%) } 26% { transform: translateY(0) } 42% { transform: translateY(-75%) } 50% { transform: translateY(-20%) } 70%, 100% { transform: translateY(-105%) } }
+  @keyframes lidBot { 0% { transform: translateY(0) } 18% { transform: translateY(62%) } 26% { transform: translateY(0) } 42% { transform: translateY(75%) } 50% { transform: translateY(20%) } 70%, 100% { transform: translateY(105%) } }
   #fxflash { position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: #fff; }
   .chk { display: flex; gap: 10px; align-items: center; margin: -4px 0 16px; font-size: 12px; color: var(--dim); letter-spacing: .12em; cursor: pointer; }
   .chk input { accent-color: #8a0b0b; width: 16px; height: 16px; }
@@ -218,6 +236,8 @@
   <div class="lhint" id="lhint">the house is letting you in</div>
 </div>
 <div id="fxflash"></div>
+<div id="intro"><video playsinline muted preload="auto"></video><div class="ibars"></div><div class="ifade"></div><div class="iskip">HOLD SPACE TO SKIP <i></i></div></div>
+<div id="eyes"><b></b><b></b></div>
 
 <div id="hud">
   <div id="effigies">THE STAR<div class="icons" id="icons"></div><div id="objective">Find the five gifts. Stay quiet.</div><div id="clues"></div></div>

@@ -298,6 +298,23 @@ Original checklist:
   the model sits under `flip` (surface rotation/offset) and `P` (body laid flat), blended over ~0.5 s, with the
   Crawler's spider-limb pose. Footsteps become `audio.skitter` while climbing.
 
+## 7b3. Intro cut scene (snowy road, truck, wake up in the house)
+
+- `blender/build_intro.py` builds the whole outside scene by script (road along `cx(y)`, terrain, guard rail, pines,
+  Poly Haven street lamps + textures fetched by `blender/fetch_assets.py` into gitignored `blender/assets/`, car,
+  truck, Geometry-Nodes snow, 3 cameras on timeline markers). Shots A (wide), B (roadside pass-by), C (chase, lamps
+  dying) = frames 1-390 at 24 fps, rendered to PNG then `blender/encode_intro.py` -> `public/video/intro.mp4`.
+  With `--export` it also writes `public/models/intro_car.glb` (7-seater interior, empties `seat_0..5`, wiper pivots)
+  and `intro_truck.glb`.
+  Rebuild: `python3 blender/fetch_assets.py`; `Blender -b --factory-startup --python blender/build_intro.py -- /tmp/intro.blend --export`;
+  `Blender -b /tmp/intro.blend -a` (frames go next to the .blend in `intro_frames/`); then encode.
+- `public/intro.js`: `preloadIntro()` (video as a blob + the two GLBs) and `playIntro()` (video, then a live three.js
+  scene inside the car with every player's character from `createSeatedCharacter()` in entities.js; truck, horn,
+  screech, crash, black + ringing). Hold Space / Esc skips. `main.js` runs it from `buildGame` only when the start
+  message has `intro: true` (server: first 4 s of a game, not spectators); while it runs `frame()` hands over to
+  `S.intro.frame(dt)`. Afterwards `enterHouse(m, true)`: you start lying down (`me.eye` 0.3, `#eyes` blink, blur)
+  and get up when you click in. The server keeps her dormant `18 + INTRO_S` (30) seconds.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).
