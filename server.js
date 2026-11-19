@@ -654,19 +654,27 @@ function startTunnel(attempt = 1) {
     if (m && !game.publicUrl) {
       game.publicUrl = m[0];
       console.log(`\n  >>> Friends ANYWHERE join here:  ${game.publicUrl}\n`);
+      try { fs.writeFileSync(new URL('./public-link.txt', import.meta.url), game.publicUrl + '\n'); } catch {}
       broadcast(lobbyMsg());
     }
   };
   proc.stdout.on('data', scan); proc.stderr.on('data', scan);
   proc.on('exit', () => {
+    if (game.stopping) return;
     const had = game.publicUrl; game.publicUrl = null;
-    if (had || attempt >= 4) { if (!had) console.log('\n  Could not open a worldwide link. This network may be blocking Cloudflare; try another Wi-Fi or a phone hotspot.\n'); return; }
-    console.log(`  [tunnel] Cloudflare did not answer, trying again (${attempt + 1}/4)...`);
-    setTimeout(() => startTunnel(attempt + 1), 4000 * attempt);
+    // Never give up: the game is meant to stay reachable. A dropped link (Wi-Fi change, sleep) reopens by itself;
+    // a quick tunnel then gets a new random address, written to public-link.txt.
+    if (had) { console.log('  [tunnel] The worldwide link dropped, reopening...'); setTimeout(() => startTunnel(1), 3000); return; }
+    if (attempt === 4) console.log('\n  Could not open a worldwide link. This network may be blocking Cloudflare; try another Wi-Fi or a phone hotspot. Still trying every minute.\n');
+    else if (attempt < 4) console.log(`  [tunnel] Cloudflare did not answer, trying again (${attempt + 1}/4)...`);
+    setTimeout(() => startTunnel(attempt + 1), Math.min(4000 * attempt, 60000));
   });
-  if (attempt === 1) {
+  if (!game.tunnelHooks) {
+    game.tunnelHooks = true;
+    const stop = () => { game.stopping = true; game.tunnelProc?.kill(); process.exit(0); };
     process.on('exit', () => game.tunnelProc?.kill());
-    process.on('SIGINT', () => { game.tunnelProc?.kill(); process.exit(0); });
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
   }
 }
 function tunnelMissing() {
