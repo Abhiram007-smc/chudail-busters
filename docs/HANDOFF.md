@@ -315,6 +315,14 @@ Original checklist:
   `S.intro.frame(dt)`. Afterwards `enterHouse(m, true)`: you start lying down (`me.eye` 0.3, `#eyes` blink, blur)
   and get up when you click in. The server keeps her dormant `18 + INTRO_S` (30) seconds.
 
+Intro v2 (public/intro.js): the car, its occupants and lights live in a `rig` group that swerves/skids/gets shoved;
+the world streams past. Co-op dialogue `SCRIPT` (holiday plan, player names via `{n0}`) is spoken with
+`speechSynthesis` (onstart/onend pace it; without voices subtitles run on reading speed) and shown in `.isub`; the
+line marked `dark` starts the lamps dying; after the last line `setTruck()` starts the truck sequence `TR`
+(horn, beams, swerve, outside slow-mo at `SLOWMO`, impact -> glass burst -> white). Driver: `createSeatedCharacter`
+`update(..., { driver, steer })` puts both hands on the wheel. Lamp hum/crackle: `snd.lamp(level)` per frame,
+`snd.flicker()/pop()` on the video's timeline. Solo players get no dialogue. Server `INTRO_S` = 65.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

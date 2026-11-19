@@ -310,7 +310,7 @@ const LOAD_LINES = [
   'keep your light low', 'five gifts. five points. one way out', 'the last group did not come back up',
 ];
 let loadFx = null;
-function startLoadingFx() {
+function startLoadingFx(quiet = false) {
   stopLoadingFx();
   const el = $('loading'), line = $('lline'), prog = $('lprog');
   try { audio.init(); } catch {}
@@ -324,17 +324,18 @@ function startLoadingFx() {
   };
   type(); every(2300, type);
   every(120, () => { st.p += (st.done ? 100 - st.p : (88 - st.p) * 0.035); prog.style.width = st.p.toFixed(1) + '%'; });
-  every(900, () => { try { audio.heartbeat(0.35 + Math.min(0.4, (performance.now() - st.t0) / 12000)); } catch {} });
+  // (quiet: the intro cut scene comes next, so no ghostly sounds before it)
+  if (!quiet) every(900, () => { try { audio.heartbeat(0.35 + Math.min(0.4, (performance.now() - st.t0) / 12000)); } catch {} });
   // she drifts up out of the dark now and then
   every(2600, () => {
     if (Math.random() < 0.55) { face.style.opacity = rnd(0.05, 0.12).toFixed(2); setTimeout(() => (face.style.opacity = 0), 900); }
   });
-  setTimeout(() => { try { audio.whisper(rnd(-0.8, 0.8), 0.35, 2.2); audio.rumble(0.45, 4); } catch {} }, 700);
+  if (!quiet) setTimeout(() => { try { audio.whisper(rnd(-0.8, 0.8), 0.35, 2.2); audio.rumble(0.45, 4); } catch {} }, 700);
   // one subliminal frame, once
   setTimeout(() => {
     if (!loadFx || FX.calm) return;
     face.style.transition = 'none'; face.style.opacity = 0.75; face.style.filter = 'invert(1) contrast(2)';
-    try { audio.stinger(0.35); } catch {}
+    if (!quiet) try { audio.stinger(0.35); } catch {}
     setTimeout(() => { face.style.opacity = 0; face.style.filter = ''; face.style.transition = ''; }, 60);
   }, rnd(1900, 3100));
   loadFx = st;
@@ -348,7 +349,7 @@ function startGame(m) {
   leaveGame();
   showScreen('loading');
   S.phase = 'loading';
-  startLoadingFx();
+  startLoadingFx(!!m.intro && !S.spectator);
   const t0 = performance.now();
   // let the dread build for a few seconds even on a fast machine
   const go = () => { if (loadFx) loadFx.done = true; setTimeout(() => buildGame(m), Math.max(250, 4200 - (performance.now() - t0))); };
@@ -479,7 +480,7 @@ function enterHouse(m, woke) {
   if (woke && S.me && !S.spectator) { S.me.eye = 0.3; S.wakePending = true; } // lying on the floor until you click in
   else fxFace(70, 0.7);
   // the door shuts behind you
-  fxFlash('#7a0000', woke ? 0.4 : 0.8, 700); audio.stinger(woke ? 0.35 : 0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1);
+  fxFlash('#7a0000', woke ? 0.4 : 0.8, 700); if (!woke) { audio.stinger(0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1); }
   showScreen('resume');
   $('resume').querySelector('h2').textContent = 'CLICK TO ENTER';
   if (!S.spectator) showBriefing(); else $('brief').style.display = 'none';

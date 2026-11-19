@@ -72,7 +72,7 @@ const spectators = new Set(); // hidden admins: receive everything, invisible to
 const broadcast = (msg) => { const s = JSON.stringify(msg); for (const p of game.players.values()) if (p.ws.readyState === 1) p.ws.send(s); for (const w of spectators) if (w.readyState === 1) w.send(s); };
 const now = () => game.time;
 const rand = (a, b) => a + Math.random() * (b - a);
-const INTRO_S = 30; // the intro cut scene (public/intro.js) runs ~29 s; she stays asleep through it
+const INTRO_S = 65; // the intro cut scene (public/intro.js) runs up to ~60 s with the co-op conversation; she sleeps through it
 const frontOf = (h) => (h.type === 'bed' ? 1.55 : 0.95); // where you stand in front of a hiding spot
 const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];

@@ -40,7 +40,7 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 Every game starts with a cut scene: you and your friends are driving up a snowy mountain road at night. The street
 lights flicker and die one by one. Then a truck's lights come out of the dark, in your lane. When you wake up, you are
 lying on the floor of the house. The outside shots are a movie rendered in Blender; the inside of the car is played
-live, so **everyone's chosen character is sitting in the car** (the first player drives). Hold **Space** to skip it.
+live, so **everyone's chosen character is sitting in the car** (the first player drives). In co-op the friends chat about their holiday plan on the way (spoken, with subtitles, using your player names) until the lights start dying. Hold **Space** to skip it.
 
 ## Difficulty
 

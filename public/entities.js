@@ -663,21 +663,36 @@ export function createSeatedCharacter(key, seed = 0) {
   const wrap = new THREE.Group(); wrap.add(inst); inst.scale.multiplyScalar(k); wrap.rotation.y = Math.PI;
   const root = new THREE.Group(); root.add(wrap);
   const ph = seed * 1.9;
+  let lookNow = 0;
   const api = {
     root,
-    update(dt, t, fear = 0, look = 1) {
+    // opts: talk 0..1 (speaking: little nods, a gesture), lookYaw (turn the head towards someone, radians),
+    // driver (hands on the wheel), steer (-1..1, the wheel yanked)
+    update(dt, t, fear = 0, look = 1, opts = {}) {
       bent.forEach((b, i) => b.quaternion.copy(pre[i]));
       mixer.update(dt);
       bent.forEach((b, i) => pre[i].copy(b.quaternion));
       if (!sit) { for (const b of B.thighs) turn(b, 'axX', -1.5); for (const b of B.shins) turn(b, 'axX', 1.55); }
-      // glancing around, out of the windows; at the end everyone stares ahead
-      const g = (Math.sin(t * 0.55 + ph) * 0.45 + Math.sin(t * 1.7 + ph * 2) * 0.12) * look * (1 - fear);
-      turn(B.neck, 'axY', g * 0.5); turn(B.head, 'axY', g * 0.6);
-      if (fear > 0) { // arms up in front of the face
+      const talk = opts.talk || 0;
+      // glancing around, out of the windows, or at whoever is talking; at the end everyone stares ahead
+      lookNow += ((opts.lookYaw ?? 0) - lookNow) * Math.min(1, dt * 4);
+      const idleG = (Math.sin(t * 0.55 + ph) * 0.45 + Math.sin(t * 1.7 + ph * 2) * 0.12) * (opts.lookYaw == null ? 1 : 0.25);
+      const g = (idleG + lookNow) * look * (1 - fear);
+      turn(B.neck, 'axY', g * 0.45); turn(B.head, 'axY', g * 0.55);
+      if (talk) { turn(B.head, 'axX', Math.sin(t * 8.5 + ph) * 0.06 * talk); turn(B.neck, 'axZ' in B.neck?.userData ? 'axZ' : 'axY', Math.sin(t * 3.1) * 0.05 * talk); }
+      if (opts.driver) { // both hands on the wheel; it gets yanked at the end
+        const st = opts.steer || 0;
+        B.uarms.forEach((b, i) => { const s = i ? 1 : -1; turn(b, 'axX', -0.95 - st * s * 0.25); turn(b, 'axY', s * 0.38); });
+        B.farms.forEach((b, i) => { const s = i ? 1 : -1; turn(b, 'axX', -0.6 + st * s * 0.3); });
+      } else if (fear > 0) { // arms up in front of the face
         B.uarms.forEach((b, i) => { turn(b, 'axX', -1.7 * fear); turn(b, 'axY', (i ? -0.5 : 0.5) * fear); });
         B.farms.forEach((b) => turn(b, 'axX', -1.1 * fear));
         turn(B.head, 'axX', 0.25 * fear);
+      } else if (talk) { // talking with one hand
+        turn(B.uarms[1], 'axX', -0.35 * talk + Math.sin(t * 5 + ph) * 0.08 * talk);
+        turn(B.farms[1], 'axX', -0.9 * talk + Math.sin(t * 6.3 + ph) * 0.15 * talk);
       }
+      if (opts.driver && fear > 0) turn(B.head, 'axX', 0.15 * fear);
     },
     placeHips(target) { // move the whole character so its hip bone sits on the seat
       api.update(0, 0); root.updateMatrixWorld(true);

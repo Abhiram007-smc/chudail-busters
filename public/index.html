@@ -166,6 +166,8 @@
   #intro.live video { display: none; }
   #intro .ibars { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#000 0 9vh, transparent 9vh calc(100% - 9vh), #000 calc(100% - 9vh)); }
   #intro .ifade { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; }
+  #intro .isub { position: absolute; left: 50%; bottom: calc(9vh + 46px); transform: translateX(-50%); width: min(900px, 86vw); text-align: center; font-size: clamp(15px, 2vw, 21px); line-height: 1.45; color: #efe7d2; text-shadow: 0 2px 6px #000, 0 0 2px #000; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #intro .isub b { margin-right: 8px; letter-spacing: .06em; }
   #intro .iskip { position: absolute; right: 26px; bottom: calc(9vh + 14px); font-size: 11px; letter-spacing: .3em; color: rgba(220,210,190,.45); }
   #intro .iskip i { display: inline-block; width: 60px; height: 2px; margin-left: 8px; vertical-align: middle; background: linear-gradient(90deg, #a00 calc(var(--p, 0) * 100%), rgba(255,255,255,.15) 0); }
   /* waking up: eyelids blink open */
@@ -236,7 +238,7 @@
   <div class="lhint" id="lhint">the house is letting you in</div>
 </div>
 <div id="fxflash"></div>
-<div id="intro"><video playsinline muted preload="auto"></video><div class="ibars"></div><div class="ifade"></div><div class="iskip">HOLD SPACE TO SKIP <i></i></div></div>
+<div id="intro"><video playsinline muted preload="auto"></video><div class="ibars"></div><div class="ifade"></div><div class="isub"></div><div class="iskip">HOLD SPACE TO SKIP <i></i></div></div>
 <div id="eyes"><b></b><b></b></div>
 
 <div id="hud">
