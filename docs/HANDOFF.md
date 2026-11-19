@@ -316,9 +316,9 @@ Original checklist:
   and get up when you click in. The server keeps her dormant `18 + INTRO_S` (30) seconds.
 
 Intro v2 (public/intro.js): the car, its occupants and lights live in a `rig` group that swerves/skids/gets shoved;
-the world streams past. Co-op dialogue `SCRIPT` (holiday plan, player names via `{n0}`) is spoken with
-`speechSynthesis` (onstart/onend pace it; without voices subtitles run on reading speed) and shown in `.isub`; the
-line marked `dark` starts the lamps dying; after the last line `setTruck()` starts the truck sequence `TR`
+the world streams past. Co-op dialogue `SCRIPT` (holiday plan, player names via `{n0}`) is shown in `.isub`; the
+line marked `dark` starts the lamps dying (since 7e the friends are SILENT: no speechSynthesis, subtitles only, at
+reading speed); after the last line `setTruck()` starts the truck sequence `TR`
 (horn, beams, swerve, outside slow-mo at `SLOWMO`, impact -> glass burst -> white). Driver: `createSeatedCharacter`
 `update(..., { driver, steer })` puts both hands on the wheel. Lamp hum/crackle: `snd.lamp(level)` per frame,
 `snd.flicker()/pop()` on the video's timeline. Solo players get no dialogue. Server `INTRO_S` = 65.
@@ -329,6 +329,45 @@ porch steps into the black doorway). It imports `public/models/hollow.glb` and b
 in Blender. Fog is a volume BOX there (a world volume blacked the whole scene out). `intro.js` `startDrag()` plays it
 after the white flash (`INTRO.dragAfter`), with cues (crunch, scrape, thud, creak, slam); Space/Esc -> `skipAll()`.
 Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if it fails to load. Server INTRO_S 80.
+
+## 7e. Furniture collision, real footsteps, scarier ghost, Range Rover intro car, silent friends
+
+- **Nobody walks through furniture.** `shared/map.js` `staticColliders(map)` (doorway pillars, every prop except dolls,
+  shrine plinths + altar, same boxes `world.js` builds) and `resolveSolid(map, L, x, z, r)` (walls + those boxes).
+  The server's `moveEntity` (ghost and crawler) now uses `resolveSolid`; before, she walked through lockers,
+  wardrobes and beds. Client: when she climbs a wall (`crawl` 2/3) and a locker/wardrobe stands against that wall
+  within 1.6 m (`furnitureAlongWall` in main.js), she takes the ceiling instead of sinking into it.
+- **Footsteps** are real recordings (CC0, TinyWorlds/OpenGameArt): `public/sounds/steps/{stone01,wood01-03}.m4a`
+  (mono AAC, loudness-normalised, so Safari/iOS decode them). `audio.loadSteps()` (called with the scream sample);
+  `footstep()` plays stone on the chequered tiles (`surface === 'tile'`) and a random wood take elsewhere, with small
+  pitch/volume variation; the synthesised step is only a fallback (its tile hiss was the "bad tile sound").
+  `audio.floorCreak()` (renamed so it does not override the ambient `creak(x, y, z)`).
+- **Scarier ghost.**
+  - Face reveal: `addFaceHorror(head)` in entities.js (gaping black mouth with needle teeth and a red glow, black
+    tears). `root.userData.reveal` (set in main.js: chasing you within 7 m, staring, or sniffing within 4 m) parts
+    the six front hair strands to the sides and drops the jaw (shudders while chasing).
+  - The stare (server): in wander/hunt, if a player farther than 9 m sees her and is looking at her (dot > 0.9),
+    50% chance she stops (`state 'stare'`, 1.8-3.2 s, at most every 25-45 s), turns to face them, head lolled over
+    (`stare` pose). Then 55% she charges (`ev chase` with `charge: true`: flash, glitch, big shake) or she is gone
+    (`ev vanish`: static burst, lights cut 0.35 s, teleported 6-12 cells from that player out of everyone's sight).
+    If the player comes within 6 m she charges. Client: `ev stare` -> `audio.stareDrone()` + slow zoom to 54 deg FOV.
+- **Intro car = Range Rover** (CC-BY 3.0 "Range Rover" by IvOfficial, poly.pizza; `blender/fetch_assets.py` fetches
+  it to `blender/assets/car/range_rover.glb`). `build_intro.py` (`USE_RR`) imports it, rotates (its front is -Y),
+  scales to a 2.9 m wheelbase, drops its own seats and still wipers, makes its glass our see-through `glass` and its
+  panels double-sided (otherwise the roof vanishes from inside). Our interior is lifted `IZ = 0.22` onto its floor;
+  seats re-placed (front on the floor, bench of three on its rear-seat base, last row in the boot) with roof clearance
+  checked by ray casts (inside roof ~2.0 m). Seat backs now lean back (they leaned forward before). Without the GLB
+  the old primitive SUV is still built. `intro.js` reads the lift from `seat_0` and finds the headlamps by name.
+  Test hook: `window.__hm.introLive = { scene, rig, cam, car, people }`.
+- **Seated legs no longer go through the car floor.** Most characters (Quaternius rigs) keep `FootL/FootR` on IK
+  bones parented to the root, so the shins stretched down to the road whatever the knees did.
+  `createSeatedCharacter(key, seed, { knees })` now poses both legs by hand from the standing pose (thighs forward
+  and `knees` rad up, shins hanging) and pins each IK foot to the end of its shin every frame. Seated characters are
+  1.64 m. `intro.js` gives the boot seat (5) `knees: 0.75`. Checked by measuring each person's bounding box in the
+  rig: feet 0.68-0.85 (floors 0.64-0.93), heads <= 2.0 (inside roof ~2.0).
+- Dialogue is silent (user request): no speechSynthesis at all.
+- Tested with a headless bot on a separate port that keeps 10-14 m from her, looking at her, and breaks line of sight
+  after each chase so the stare can trigger (bots only ever on test ports, never the live 3000).
 
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 

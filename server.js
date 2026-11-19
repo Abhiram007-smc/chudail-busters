@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, isWall, cellOf, stairTransition,
+  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, resolveSolid, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,7 @@ const CHARS = ['adventurer', 'soldier', 'hoodie', 'woman', 'man', 'punk', 'casua
 // ---------------- static files ----------------
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
-  '.json': 'application/json', '.mp4': 'video/mp4', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.json': 'application/json', '.mp4': 'video/mp4', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 const ROOTS = [
   ['/vendor/three/', path.join(__dirname, 'node_modules/three/')],
@@ -213,7 +213,7 @@ function moveEntity(e, tx, tz, speed, dt, radius) {
   if (d < 0.05) return 0;
   const step = Math.min(d, speed * dt);
   const ox = e.x, oz = e.z;
-  [e.x, e.z] = resolveCircle(game.map, e.L, e.x + (dx / d) * step, e.z + (dz / d) * step, radius);
+  [e.x, e.z] = resolveSolid(game.map, e.L, e.x + (dx / d) * step, e.z + (dz / d) * step, radius);
   const tr = stairTransition(game.map, e.L, e.x, e.z);
   if (tr) { [e.L, e.x, e.z] = tr; e.path = null; }
   const want = Math.atan2(-dx, -dz);
@@ -258,6 +258,34 @@ function updateMonster(dt) {
     return;
   }
 
+  // --- the stare: you spotted her down the hall and she stops dead and looks back at you.
+  // Then she either charges or is simply gone.
+  if (m.state === 'stare') {
+    m.speed = 0; m.stareT -= dt;
+    const tp = game.players.get(m.target);
+    const ok = tp && tp.alive && !tp.escaped && !tp.hid && tp.L === m.L;
+    if (ok) { const want = Math.atan2(-(tp.x - m.x), -(tp.z - m.z)); let df = want - m.yaw; while (df > Math.PI) df -= Math.PI * 2; while (df < -Math.PI) df += Math.PI * 2; m.yaw += df * Math.min(1, dt * 3); }
+    const close = ok && Math.hypot(tp.x - m.x, tp.z - m.z) < 6;
+    if (m.stareT <= 0 || close || !ok) {
+      if (ok && (close || Math.random() < 0.55)) {
+        m.state = 'chase'; m.lostT = 0; m.lastSeen = { x: tp.x, z: tp.z, L: tp.L }; m.stall = 0;
+        broadcast({ t: 'ev', e: 'chase', id: tp.id, charge: true });
+      } else {
+        const from = { x: m.x, z: m.z, L: m.L };
+        for (let k = 0; k < 40; k++) {
+          const p = tp || pickRand(targets);
+          const s = p && randomFloorNear(p.L, p.x, p.z, 6, 12);
+          if (s && !targets.some((q) => q.L === s.L && lineOfSight(map, s.L, s.x, s.z, q.x, q.z) && Math.hypot(q.x - s.x, q.z - s.z) < 25)) {
+            m.x = s.x; m.z = s.z; m.L = s.L; m.goal = null; m.path = null; break;
+          }
+        }
+        m.state = 'wander'; m.crawl = 0;
+        broadcast({ t: 'ev', e: 'vanish', x: from.x, z: from.z, L: from.L });
+      }
+    }
+    return;
+  }
+
   // --- perception (same floor only)
   const fwdX = -Math.sin(m.yaw), fwdZ = -Math.cos(m.yaw);
   let seen = null, seenD = 1e9, lit = false, litBy = null, minD = 1e9;
@@ -291,6 +319,17 @@ function updateMonster(dt) {
   }
 
   // --- state machine
+  if (seen && m.state !== 'chase' && !m.crawl && seenD > 9 && t > (m.stareNext || 0)) {
+    // is that player actually looking at her? then she stares back instead of running at once
+    const lx = -Math.sin(seen.yaw), lz = -Math.cos(seen.yaw);
+    const look = ((m.x - seen.x) * lx + (m.z - seen.z) * lz) / seenD;
+    if (look > 0.9 && Math.random() < 0.5) {
+      m.state = 'stare'; m.stareT = rand(1.8, 3.2); m.target = seen.id; m.stareNext = t + rand(25, 45);
+      broadcast({ t: 'ev', e: 'stare', id: seen.id });
+      return;
+    }
+    m.stareNext = t + 4;
+  }
   if (seen) {
     if (m.state !== 'chase') {
       m.stall = 0.85; broadcast({ t: 'ev', e: 'chase', id: seen.id });

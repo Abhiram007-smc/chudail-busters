@@ -3,6 +3,7 @@
   python3 blender/fetch_assets.py
 
 Street Lamp 01 (model, 1k), Asphalt Snow and Snow 02 (textures, 2k). All CC0 from https://polyhaven.com.
+The car body: "Range Rover" by IvOfficial, CC-BY 3.0, from https://poly.pizza/m/8zk4o6nALW (credit in README.md).
 """
 import json, os, subprocess
 
@@ -44,4 +45,6 @@ if __name__ == '__main__':
     model('street_lamp_01')
     texture('asphalt_snow')
     texture('snow_02')
+    print('poly.pizza (CC-BY 3.0, IvOfficial) Range Rover ->', OUT)
+    save('https://static.poly.pizza/139b654a-14c7-4483-960a-5a02615e1af7.glb', os.path.join(OUT, 'car', 'range_rover.glb'))
     print('done')

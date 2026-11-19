@@ -594,3 +594,43 @@ export function pushOutBox(x, z, r, minx, minz, maxx, maxz) {
   if (m === t) return [x, minz - r];
   return [x, maxz + r];
 }
+
+// solid furniture, doorway pillars and shrine stones: [minx, minz, maxx, maxz, L].
+// The client and the server both use this list, so nobody walks through a wardrobe.
+export function staticColliders(map) {
+  if (map._colliders) return map._colliders;
+  const out = [];
+  for (const d of map.doors) {
+    const bx = (d.i + 0.5) * CELL + d.dx * CELL / 2, bz = (d.j + 0.5) * CELL + d.dz * CELL / 2;
+    const alongX = d.dz !== 0, T = 0.34, PW = 0.75;
+    for (const s of [-1, 1]) {
+      const off = s * (CELL / 2 - PW / 2);
+      const px = bx + (alongX ? off : 0), pz = bz + (alongX ? 0 : off);
+      const hw = (alongX ? PW : T) / 2, hd = (alongX ? T : PW) / 2;
+      out.push([px - hw, pz - hd, px + hw, pz + hd, d.L]);
+    }
+  }
+  for (const p of map.props) if (p.type !== 'doll') out.push([p.x - p.hw, p.z - p.hd, p.x + p.hw, p.z + p.hd, p.L]);
+  const sh = map.shrine;
+  if (sh) {
+    for (const pt of sh.points) out.push([pt.x - 0.45, pt.z - 0.45, pt.x + 0.45, pt.z + 0.45, sh.L]);
+    const room = map.rooms[sh.room], ax = sh.x, az = room.y * CELL + 0.75;
+    out.push([ax - 1.45, az - 0.6, ax + 1.45, az + 0.6, sh.L]);
+  }
+  Object.defineProperty(map, '_colliders', { value: out, enumerable: false });
+  return out;
+}
+
+// walls + furniture: push a circle of radius r clear of everything solid on level L
+export function resolveSolid(map, L, x, z, r) {
+  const cols = staticColliders(map);
+  for (let pass = 0; pass < 2; pass++) {
+    [x, z] = resolveCircle(map, L, x, z, r);
+    for (const c of cols) {
+      if (c[4] !== L || c[0] - x > r + 0.1 || x - c[2] > r + 0.1 || c[1] - z > r + 0.1 || z - c[3] > r + 0.1) continue;
+      const p = pushOutBox(x, z, r, c[0], c[1], c[2], c[3]);
+      if (p) { x = p[0]; z = p[1]; }
+    }
+  }
+  return [x, z];
+}

@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
@@ -201,14 +201,14 @@ $('joinBtn').onclick = () => {
   S.name = $('name').value.trim() || 'Survivor';
   try { localStorage.setItem('hm_name', S.name); } catch {}
   audio.init();
-  if (!audio.samples) audio.loadSample('scream', '/sounds/scream.mp3');
+  if (!audio.samples) audio.loadSample('scream', '/sounds/scream.mp3'); audio.loadSteps();
   $('joinBtn').disabled = true; $('joinBtn').textContent = 'Opening the gates…';
   S.phase = 'joining';
   connect(); loadShare();
 };
 $('specBtn').onclick = () => {
   S.spectator = true; S.name = 'Spectator';
-  audio.init(); if (!audio.samples) audio.loadSample('scream', '/sounds/scream.mp3');
+  audio.init(); if (!audio.samples) audio.loadSample('scream', '/sounds/scream.mp3'); audio.loadSteps();
   $('specBtn').disabled = true; $('joinBtn').disabled = true;
   S.phase = 'joining'; connect(); loadShare();
 };
@@ -641,7 +641,8 @@ function onEvent(m) {
     case 'chase': {
       const d = Math.hypot(S.mon.x - camera.position.x, S.mon.z - camera.position.z);
       if (m.id === S.myId) {
-        audio.screech(S.mon.x, S.mon.z, 0.9); audio.stinger(0.55); S.shake = 0.6; S.red = 0.35;
+        audio.screech(S.mon.x, S.mon.z, 0.9); audio.stinger(0.55); S.shake = m.charge ? 1 : 0.6; S.red = m.charge ? 0.55 : 0.35;
+        if (m.charge) { fxFlash('#fff', 0.35, 120); fxGlitch(120); S.stareUntil = 0; }
         message('IT SEES YOU. RUN.', 'red');
       } else if (d < 25) audio.screech(S.mon.x, S.mon.z, 0.6);
       break;
@@ -740,6 +741,17 @@ function onEvent(m) {
       message(`${nameOf(m.by)} placed the ${tl.name} on the star (${m.count}/${TALISMANS})`);
       S.world.exit.setProgress(m.count, false);
       buildIcons(); setObjective(); renderClues();
+      break;
+    }
+    case 'stare': { // you looked at her down the hall, and she stopped to look back
+      if (m.id === S.myId) { audio.stareDrone(2.6); S.stareUntil = performance.now() / 1000 + 3.2; }
+      break;
+    }
+    case 'vanish': {
+      if (S.me && (m.L ?? 0) === S.me.L && Math.hypot(m.x - S.me.x, m.z - S.me.z) < 30) {
+        audio.vanish(m.x, m.z); fxGlitch(150); S.lightsOutUntil = Math.max(S.lightsOutUntil || 0, performance.now() / 1000 + 0.35);
+      }
+      S.stareUntil = 0;
       break;
     }
     case 'mdrop': { // she lets go of the ceiling / wall right in front of someone
@@ -1171,8 +1183,10 @@ function updatePlayer(dt, t) {
   me.bob += moved * (me.sprint ? 3.2 : 3.6);
   const bobAmp = me.sprint ? 0.085 : (me.crouch || me.sneak) ? 0.015 : 0.04;
   // field-of-view kick so sprinting feels fast
-  const fovT = me.sprint && me.moving ? 82 : 72;
-  if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix(); }
+  // while she stares back at you, the hall seems to stretch and pull her closer (slow zoom in)
+  const staring = t < (S.stareUntil || 0);
+  const fovT = staring ? 54 : me.sprint && me.moving ? 82 : 72;
+  if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * (staring ? 0.9 : 6)); camera.updateProjectionMatrix(); }
   let eyeT = me.crouch ? 1.05 : 1.62;
   if (me.wake != null) { // getting up off the floor after the crash
     me.wake += dt;
@@ -1285,6 +1299,21 @@ function updateCrawler(dt, t) {
   }
 }
 
+// is there furniture between (x,z) and the wall plane, within a couple of metres along the wall?
+function furnitureAlongWall(L, x, z, alongXAxis, plane) {
+  for (const c of staticColliders(S.map)) {
+    if (c[4] !== L) continue;
+    if (alongXAxis) { // wall plane is x = plane
+      if (c[3] < z - 1.6 || c[1] > z + 1.6) continue;
+      if (Math.max(c[0], Math.min(x, plane)) <= Math.min(c[2], Math.max(x, plane)) + 0.05) return true;
+    } else {
+      if (c[2] < x - 1.6 || c[0] > x + 1.6) continue;
+      if (Math.max(c[1], Math.min(z, plane)) <= Math.min(c[3], Math.max(z, plane)) + 0.05) return true;
+    }
+  }
+  return false;
+}
+
 function updateMonster(dt, t) {
   const m = S.mon, g = S.monster;
   if (S.jumpscare) {
@@ -1311,11 +1340,16 @@ function updateMonster(dt, t) {
     if (isWall(S.map, m.L || 0, ci + (ax ? Math.sign(rx) : 0), cj + (ax ? 0 : Math.sign(rz)))) {
       const plane = ax ? (ci + (rx > 0 ? 1 : 0)) * CELL : (cj + (rz > 0 ? 1 : 0)) * CELL;
       wallD = clamp(Math.abs(plane - (ax ? m.x : m.z)) / Math.max(0.5, Math.abs(ax ? rx : rz)), 0.45, 2.2);
+      // a locker or wardrobe against that wall would swallow her: take the ceiling instead
+      if (furnitureAlongWall(m.L || 0, m.x, m.z, ax, plane)) m.crawlCeil = true;
     } else m.crawlCeil = true; // no wall here (doorway, open room): stay on the ceiling for this climb
   }
   if (mode >= 2 && m.crawlCeil) mode = 1;
   g.userData.setCrawl?.(mode, wallD, WALL_H);
   const st = m.state === 'chase' && m.speed < 0.05 ? 'stall' : m.state === 'bound' ? 'stunned' : m.state;
+  // up close while she hunts you (or while she stares at you) her hair parts and you see her face
+  const camD = Math.hypot(m.x - camera.position.x, m.z - camera.position.z);
+  g.userData.reveal = !mode && (m.L || 0) === S.camL && ((m.state === 'chase' && camD < 7) || m.state === 'stare' || m.state === 'sniff' && camD < 4) ? 1 : 0;
   g.userData.update(dt, m.vis, st, t);
   // hide her if her floor isn't drawn (keep the root visible: it holds a light)
   const shown = levelShown(m.L || 0) && !(m.boundT > 9);

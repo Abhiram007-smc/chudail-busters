@@ -128,7 +128,9 @@ To rebuild the Blender models:
 - Survivor characters by **Quaternius** via [Poly Pizza](https://poly.pizza):
   - "Adventurer", "Hoodie Character", "Woman", "Man", "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
-- Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the car, truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
+- Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
+- Intro car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
+- Footsteps: "Different steps on wood, stone, leaves, gravel and mud" by **TinyWorlds** ([OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)), CC0
 - Horn in the intro: "Car Horn.wav" by **15HPanska_Ruttner_Jan** (Wikimedia Commons), CC0
 - After the crash: the Chudail dragging you to the house is rendered in Blender from the game's own Chudail model (`blender/build_drag.py`)
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0

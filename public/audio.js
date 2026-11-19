@@ -187,11 +187,27 @@ export class AudioSys {
       s2.connect(bp); bp.connect(g2); g2.connect(dest); s2.start(t + 0.1, rnd(0, 2), 0.7);
     }
   }
+  // real recorded steps (CC0, see public/sounds/steps/LICENSE.txt): stone for the chequered tiles, three takes on wood
+  loadSteps() {
+    if (this.stepsLoading || !this.ctx) return;
+    this.stepsLoading = true;
+    for (const n of ['stone01', 'wood01', 'wood02', 'wood03']) this.loadSample('step_' + n, `/sounds/steps/${n}.m4a`);
+  }
   footstep(vol, pos, surface) {
     const ctx = this.ctx, t = ctx.currentTime;
     let dest = this.master;
     if (pos) { const p = this.panner(pos.x, 0.1, pos.z, 1.5, 1.4); dest = p; this.out(p, 0.25); }
-    else { const g0 = ctx.createGain(); g0.gain.value = 1; g0.connect(this.master); const w = ctx.createGain(); w.gain.value = 0.18; g0.connect(w); w.connect(this.reverb); dest = g0; }
+    else { const g0 = ctx.createGain(); g0.gain.value = 1; g0.connect(this.master); const w = ctx.createGain(); w.gain.value = surface === 'tile' ? 0.3 : 0.18; g0.connect(w); w.connect(this.reverb); dest = g0; }
+    const sm = this.samples || {};
+    const take = surface === 'tile' ? sm.step_stone01 : [sm.step_wood01, sm.step_wood02, sm.step_wood03][Math.floor(Math.random() * 3)];
+    if (take) {
+      const s = this.src(take); s.playbackRate.value = surface === 'tile' ? rnd(0.9, 1.06) : rnd(0.88, 1.08);
+      const eq = ctx.createBiquadFilter(); eq.type = 'lowpass'; eq.frequency.value = surface === 'tile' ? 6500 : 4200; // no harsh fizz
+      const g = ctx.createGain(); g.gain.value = vol * 2.1 * rnd(0.85, 1.1);
+      s.connect(eq); eq.connect(g); g.connect(dest); s.start(t);
+      if (surface === 'wood' && Math.random() < 0.14) this.floorCreak(vol, t, dest);
+      return;
+    }
     // heel thump
     const o = ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(rnd(85, 105), t); o.frequency.exponentialRampToValueAtTime(45, t + 0.09);
@@ -199,18 +215,20 @@ export class AudioSys {
     // sole on surface
     const n = this.src(this.white);
     const f = ctx.createBiquadFilter();
-    if (surface === 'tile') { f.type = 'bandpass'; f.frequency.value = rnd(2200, 3200); f.Q.value = 1.4; }
+    if (surface === 'tile') { f.type = 'bandpass'; f.frequency.value = rnd(900, 1300); f.Q.value = 0.9; }
     else { f.type = 'lowpass'; f.frequency.value = rnd(500, 900); }
     const ng = ctx.createGain(); this.env(ng, t + 0.012, 0.002, vol * (surface === 'tile' ? 0.55 : 0.8), surface === 'tile' ? 0.045 : 0.1);
     n.connect(f); f.connect(ng); ng.connect(dest); n.start(t, rnd(0, 2), 0.2);
     // old floorboards creak sometimes
-    if (surface === 'wood' && Math.random() < 0.18) {
-      const c = ctx.createOscillator(); c.type = 'sawtooth'; const cf = rnd(160, 320);
-      c.frequency.setValueAtTime(cf, t + 0.03); c.frequency.linearRampToValueAtTime(cf * rnd(0.8, 1.2), t + 0.3);
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(600, 1100); bp.Q.value = 12;
-      const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t + 0.03); cg.gain.linearRampToValueAtTime(vol * 0.35, t + 0.1); cg.gain.linearRampToValueAtTime(0, t + 0.32);
-      c.connect(bp); bp.connect(cg); cg.connect(dest); c.start(t + 0.03); c.stop(t + 0.35);
-    }
+    if (surface === 'wood' && Math.random() < 0.18) this.floorCreak(vol, t, dest);
+  }
+  floorCreak(vol, t, dest) {
+    const ctx = this.ctx;
+    const c = ctx.createOscillator(); c.type = 'sawtooth'; const cf = rnd(160, 320);
+    c.frequency.setValueAtTime(cf, t + 0.03); c.frequency.linearRampToValueAtTime(cf * rnd(0.8, 1.2), t + 0.3);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(600, 1100); bp.Q.value = 12;
+    const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t + 0.03); cg.gain.linearRampToValueAtTime(vol * 0.35, t + 0.1); cg.gain.linearRampToValueAtTime(0, t + 0.32);
+    c.connect(bp); bp.connect(cg); cg.connect(dest); c.start(t + 0.03); c.stop(t + 0.35);
   }
   async loadSample(name, url) {
     try {
@@ -288,10 +306,10 @@ export class AudioSys {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.25); g.gain.linearRampToValueAtTime(0, t + 0.7);
     s.connect(bp); bp.connect(g); this.out(g, 0.1); s.start(t, rnd(0, 2), 0.8);
   }
-  heartbeat(vol) {
+  heartbeat(vol, at = null) {
     const ctx = this.ctx;
     [0, 0.17].forEach((off, k) => {
-      const t = ctx.currentTime + off;
+      const t = (at ?? ctx.currentTime) + off;
       const o = ctx.createOscillator(); o.type = 'sine';
       o.frequency.setValueAtTime(k ? 52 : 62, t); o.frequency.exponentialRampToValueAtTime(30, t + 0.18);
       const g = ctx.createGain(); this.env(g, t, 0.008, vol * (k ? 0.7 : 1), 0.22);
@@ -431,6 +449,29 @@ export class AudioSys {
     const sub = ctx.createOscillator(); sub.frequency.setValueAtTime(55, t); sub.frequency.exponentialRampToValueAtTime(28, t + 1);
     const sg = ctx.createGain(); this.env(sg, t, 0.01, vol * 1.3, 1.1); sub.connect(sg); sg.connect(this.master); sub.start(t); sub.stop(t + 1.3);
     hp.connect(g); this.out(g, 0.7);
+  }
+  // she has stopped and is looking at you: a low swell that tightens like held breath, under a slow heartbeat
+  stareDrone(dur = 2.6) {
+    const ctx = this.ctx; if (!ctx) return; const t = ctx.currentTime;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.5);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(2400, t + dur);
+    [41.2, 43.6, 61.7, 87.3, 92.5].forEach((f) => {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 1.06, t + dur);
+      const og = ctx.createGain(); og.gain.value = 0.16; o.connect(og); og.connect(lp); o.start(t); o.stop(t + dur + 0.6);
+    });
+    lp.connect(g); this.out(g, 0.5);
+    for (let k = 0; k < Math.floor(dur / 0.75); k++) this.heartbeat(0.5 + k * 0.12, t + k * 0.75);
+    this.whisper(Math.random() < 0.5 ? -0.7 : 0.7, 0.16, dur);
+  }
+  // gone: a burst of static and a sucked-in breath where she stood
+  vanish(x, z) {
+    const ctx = this.ctx; if (!ctx) return; const t = ctx.currentTime;
+    const p = this.panner(x, 1.4, z, 3);
+    const n = this.src(this.white); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+    bp.frequency.setValueAtTime(5000, t); bp.frequency.exponentialRampToValueAtTime(300, t + 0.5);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    n.connect(bp); bp.connect(g); g.connect(p); n.start(t, rnd(0, 1), 0.6);
+    this.out(p, 0.8);
   }
   whisper(pan = 0, vol = 0.3, dur = 1.8) {
     const ctx = this.ctx, t = ctx.currentTime;

@@ -36,7 +36,7 @@ export function loadModels() {
   return modelsPromise;
 }
 
-const _q = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 function rigFrom(scene) {
   const inst = SkeletonUtils.clone(scene);
   inst.updateMatrixWorld(true);
@@ -191,17 +191,51 @@ function addHairStrands(head, mat) {
   // strands hang from a pivot at the centre of the skull, so they can be swung back to hang straight down
   // (gravity) while their roots slide over the scalp instead of leaving it
   const pivot = new THREE.Group(); pivot.position.set(0, 0.3, 0); head.add(pivot);
-  const place = (m, x, y, z, ry, rx) => { const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.position.set(x, y - 0.3, z); g.rotation.set(rx, ry, 0); g.add(m); pivot.add(g); strands.push({ g, rx, ph: Math.random() * 6.28 }); };
+  const place = (m, x, y, z, ry, rx, front = 0) => { const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.position.set(x, y - 0.3, z); g.rotation.set(rx, ry, 0); g.add(m); pivot.add(g); strands.push({ g, rx, ry, front, x0: g.position.x, z0: g.position.z, ph: Math.random() * 6.28 }); };
   for (let k = 0; k < 44; k++) { // crown, sides and back (angle 0 = back of the head, the face looks down -z)
     const a = rr(-2.35, 2.35), r = rr(0.12, 0.16), y = rr(0.24, 0.4);
     place(strand(rr(0.85, 1.45), rr(0.05, 0.1)), Math.sin(a) * r, y, Math.cos(a) * r, a, -rr(0.04, 0.22));
   }
   for (const x of [-0.12, -0.075, -0.035, 0.03, 0.085, 0.125]) { // curtain over the face, parted so one eye shows
-    place(strand(rr(0.7, 1.15), rr(0.045, 0.075)), x + rr(-0.01, 0.01), rr(0.3, 0.36), -0.19, Math.PI + rr(-0.15, 0.15), rr(0.1, 0.2));
+    place(strand(rr(0.7, 1.15), rr(0.045, 0.075)), x + rr(-0.01, 0.01), rr(0.3, 0.36), -0.19, Math.PI + rr(-0.15, 0.15), rr(0.1, 0.2), x < 0 ? -1 : 1);
   }
   strands.forEach((h) => (h.g.children[0].castShadow = true));
   strands.pivot = pivot;
   return strands;
+}
+
+// a gaping black mouth with needle teeth, and black tears running from the eyes (hidden behind the hair until it parts)
+function addFaceHorror(head) {
+  const black = new THREE.MeshBasicMaterial({ color: 0x030000, side: THREE.DoubleSide });
+  const toothMat = new THREE.MeshStandardMaterial({ color: 0xcfc6a8, roughness: 0.35 });
+  const g = new THREE.Group(); g.position.set(0, 0.095, -0.178); g.rotation.x = -0.3; head.add(g);
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(1, 24), black); hole.rotation.y = Math.PI; g.add(hole);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(1, 16), new THREE.MeshBasicMaterial({ color: 0x5a0a04, transparent: true, opacity: 0.5, depthWrite: false }));
+  glow.rotation.y = Math.PI; glow.position.z = 0.002; g.add(glow);
+  const upper = new THREE.Group(), lower = new THREE.Group(); g.add(upper, lower);
+  const tooth = (parent, x, down, h) => { const c = new THREE.Mesh(new THREE.ConeGeometry(0.0035, h, 4), toothMat); c.rotation.x = down ? Math.PI : 0; c.position.set(x, down ? -h / 2 : h / 2, -0.002); parent.add(c); };
+  for (let k = 0; k < 9; k++) { const x = (k - 4) * 0.0085; tooth(upper, x, true, 0.012 + Math.random() * 0.01); }
+  for (let k = 0; k < 8; k++) { const x = (k - 3.5) * 0.0085; tooth(lower, x, false, 0.01 + Math.random() * 0.01); }
+  const tears = [];
+  for (const sx of [-1, 1]) {
+    const tr = new THREE.Mesh(new THREE.PlaneGeometry(0.009, 1), black); tr.rotation.y = Math.PI; tr.position.set(sx * 0.056, 0.2, -0.176); tr.rotation.x = 0.25; head.add(tr);
+    tears.push(tr);
+  }
+  const parts = [g, ...tears];
+  parts.forEach((o) => (o.visible = false));
+  return {
+    update(rev, rage, t) {
+      const on = rev > 0.03; parts.forEach((o) => (o.visible = on));
+      if (!on) return;
+      const open = rev * (0.035 + rage * 0.075 + Math.sin(t * 24) * 0.006 * rage); // jaw drops, shudders
+      const w = 0.036 + rev * 0.012;
+      hole.scale.set(w, open + 0.004, 1); hole.position.y = -open;
+      glow.scale.set(w * 0.6, (open + 0.004) * 0.6, 1); glow.position.y = -open * 1.1;
+      upper.position.y = 0.002; lower.position.y = -open * 2 - 0.002;
+      upper.scale.x = lower.scale.x = w / 0.04;
+      for (const tr of tears) { const L = 0.03 + rev * 0.1; tr.scale.y = L; tr.position.y = 0.2 - L / 2; }
+    },
+  };
 }
 
 function addSmoke(root, tex) {
@@ -401,6 +435,8 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
     sheet.position.y -= 0.14; sheet.material = hairMat;
     const cap = head.children.find((o) => o.isMesh && o.material === S.hairCap); if (cap) cap.scale.multiplyScalar(1.06);
   }
+  const face = addFaceHorror(head);
+  anim.reveal = 0;
   const smoke = addSmoke(root, S.glow);
   const eyes = root.userData.eyes || [];
   const glitch = { t: rr(2, 6), on: 0 };
@@ -409,7 +445,8 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
   root.userData.update = (dt, speed, state, t) => {
     anim.phase += speed * dt * 2.3;
     const ph = anim.phase, moving = speed > 0.1, amp = Math.min(1, speed / 3);
-    const chase = state === 'chase', stall = state === 'stall', sniff = state === 'sniff', stun = state === 'stunned';
+    const stare = state === 'stare';
+    const chase = state === 'chase', stall = state === 'stall' || stare, sniff = state === 'sniff', stun = state === 'stunned';
     if (glow) { glow.intensity = (stun ? 6 + Math.random() * 3 : chase ? 6 : 4) * (0.85 + Math.random() * 0.15); glow.color.setHex(stun ? 0xffffff : chase ? 0xc0c8ff : 0x9fb4ff); }
     for (const [sfx, s] of LR) {
       const p = ph + (s > 0 ? Math.PI : 0);
@@ -447,7 +484,8 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
       anim.tiltTarget = Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4) : (Math.random() - 0.5) * 0.4;
       anim.turnTarget = (Math.random() - 0.5) * (chase ? 0.4 : 1.2);
     }
-    if (stall || sniff) anim.tiltTarget = sniff ? Math.sin(t * 1.5) * 0.7 : 0.75;
+    if (stall || sniff) anim.tiltTarget = sniff ? Math.sin(t * 1.5) * 0.7 : stare ? 1.25 : 0.75; // staring: the head lolls over, too far
+    if (stare) { anim.turnTarget = 0; anim.twitchT = 1; }
     anim.tilt += (anim.tiltTarget - anim.tilt) * Math.min(1, dt * 18);
     anim.turn += (anim.turnTarget - anim.turn) * Math.min(1, dt * 14);
     if (stun) { anim.tilt = Math.sin(t * 45) * 0.5; anim.turn = Math.sin(t * 37) * 0.4; }
@@ -481,12 +519,21 @@ function upgradeMonster(root, { hips, head, gown, ghost, anim, S }) {
         inst.position.y = 0;
       }
     }
+    // the face: up close the hair parts and the jaw drops open, much too far
+    anim.reveal += ((root.userData.reveal || 0) - anim.reveal) * Math.min(1, dt * (root.userData.reveal ? 3.5 : 1.5));
+    face.update(anim.reveal, chase ? 1 : stare ? 0.8 : 0.5, t);
     // hair hangs down whatever her head does (mostly), sways, and whips around when she runs
     head.getWorldQuaternion(_hq); root.getWorldQuaternion(_rq);
     strands.pivot.quaternion.identity().slerp(_hq.invert().multiply(_rq), 0.8);
     for (const h of strands) {
       h.g.rotation.z = Math.sin(t * 1.1 + h.ph) * 0.05 + (chase ? Math.sin(t * 8 + h.ph) * 0.1 : 0);
       h.g.rotation.x = h.rx + (moving ? Math.abs(Math.sin(ph + h.ph)) * 0.12 * amp : 0) + (chase ? 0.15 : 0);
+      if (h.front) { // swept aside off her face, round to the sides of the head
+        const r = anim.reveal;
+        h.g.position.x = h.x0 + h.front * r * (0.19 - Math.abs(h.x0) * 0.4);
+        h.g.position.z = h.z0 + r * 0.12;
+        h.g.rotation.y = h.ry + h.front * r * 1.1; h.g.rotation.x -= r * 0.1;
+      }
     }
     // eyes: dim embers, flaring white-red when she hunts you
     for (let k = 1; k < eyes.length; k += 2) {
@@ -619,7 +666,7 @@ export function createAvatar(name, color, charKey) {
 // A player's character sitting in the car for the intro cut scene (public/intro.js). Uses the character's own
 // sitting animation when it has one, otherwise idle with the legs bent into a seat. update(dt, t, fear, look):
 // look 0..1 lets the head wander, fear 0..1 throws the arms up in front of the face.
-export function createSeatedCharacter(key, seed = 0) {
+export function createSeatedCharacter(key, seed = 0, { knees = 0.28 } = {}) {
   const gltf = ANIMATED[key] || ANIMATED[DEFAULT_CHARS[0]];
   if (!gltf) return null;
   const inst = SkeletonUtils.clone(gltf.scene);
@@ -636,7 +683,16 @@ export function createSeatedCharacter(key, seed = 0) {
   if (idle) mixer.clipAction(idle).play();
   mixer.update(0); inst.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(inst, true);
-  const k = 1.68 / ((box.max.y - box.min.y) || 1);
+  const k = 1.64 / ((box.max.y - box.min.y) || 1); // a touch smaller than standing height: heads clear the car roof
+  // the legs are always posed by hand from the standing pose (sitting clips are for chairs, not a car's high floor);
+  // remember the standing leg pose and its world axes now
+  const legRest = new Map(), legAx = new Map();
+  { const wq0 = new THREE.Quaternion();
+    inst.traverse((o) => {
+      if (!o.isBone || !/^(upperleg|lowerleg|leftupleg|rightupleg|leftleg|rightleg)/i.test(o.name.replace(/[^a-z]/gi, ''))) return;
+      legRest.set(o, o.quaternion.clone());
+      o.getWorldQuaternion(wq0); wq0.invert(); legAx.set(o, new THREE.Vector3(1, 0, 0).applyQuaternion(wq0));
+    }); }
   mixer.stopAllAction();
   const act = mixer.clipAction(sit || idle);
   if (act) { act.play(); act.time = (seed * 0.61) % act.getClip().duration; }
@@ -657,6 +713,11 @@ export function createSeatedCharacter(key, seed = 0) {
     farms: [pick('lowerarml', 'leftforearm'), pick('lowerarmr', 'rightforearm')],
     head: pick('head'), neck: pick('neck'), hips: pick('hips'),
   };
+  // Quaternius rigs keep the feet on IK bones parented to the root: they would stay on the ground (through the car
+  // floor) while the knees bend. Pin each foot to the end of its shin instead.
+  const feet = [[pick('footl', 'leftfoot'), B.shins[0]], [pick('footr', 'rightfoot'), B.shins[1]]]
+    .filter(([f, sh]) => f && sh && f.parent !== sh)
+    .map(([f, sh]) => { const a = new THREE.Vector3(), b = new THREE.Vector3(); inst.updateMatrixWorld(true); sh.getWorldPosition(a); f.getWorldPosition(b); return { f, sh, len: a.distanceTo(b), s0: inst.getWorldScale(new THREE.Vector3()).x }; });
   const bent = [...B.thighs, ...B.shins, ...B.uarms, ...B.farms, B.head, B.neck].filter(Boolean);
   const pre = bent.map((b) => b.quaternion.clone());
   const turn = (b, ax, a) => { if (b && a) b.quaternion.multiply(_q.setFromAxisAngle(b.userData[ax], a)); };
@@ -672,7 +733,18 @@ export function createSeatedCharacter(key, seed = 0) {
       bent.forEach((b, i) => b.quaternion.copy(pre[i]));
       mixer.update(dt);
       bent.forEach((b, i) => pre[i].copy(b.quaternion));
-      if (!sit) { for (const b of B.thighs) turn(b, 'axX', -1.5); for (const b of B.shins) turn(b, 'axX', 1.55); }
+      // knees up a little (a car's floor is high), shins hanging down, feet just in front of the knees
+      for (const b of [...B.thighs, ...B.shins]) if (legRest.has(b)) b.quaternion.copy(legRest.get(b));
+      for (const b of B.thighs) if (b) b.quaternion.multiply(_q.setFromAxisAngle(legAx.get(b) || b.userData.axX, -1.5 - knees));
+      for (const b of B.shins) if (b) b.quaternion.multiply(_q.setFromAxisAngle(legAx.get(b) || b.userData.axX, 1.42 + knees));
+      if (feet.length) {
+        inst.updateMatrixWorld(true);
+        for (const ft of feet) {
+          ft.sh.getWorldPosition(_v1); ft.sh.getWorldQuaternion(_q2);
+          _v2.set(0, 1, 0).applyQuaternion(_q2).multiplyScalar(ft.len * inst.getWorldScale(_v3).x / ft.s0);
+          ft.f.parent.worldToLocal(_v1.add(_v2)); ft.f.position.copy(_v1);
+        }
+      }
       const talk = opts.talk || 0;
       // glancing around, out of the windows, or at whoever is talking; at the end everyone stares ahead
       lookNow += ((opts.lookYaw ?? 0) - lookNow) * Math.min(1, dt * 4);

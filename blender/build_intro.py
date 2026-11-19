@@ -508,69 +508,130 @@ def extrude_profile(name, prof, width, material, parent, bevel=0.05, open_face=N
     return o
 
 
-# lower body: wedge hood, upright tail (an old boxy SUV)
-# open on top (face 4) so the cabin can be seen into; the paint is double-sided
-extrude_profile('car_body', [(-2.3, 0.32), (2.3, 0.32), (2.34, 0.62), (2.25, 0.93), (1.25, 1.1), (-2.28, 1.12), (-2.33, 0.75)], 1.92, M_PAINT, CAR, 0.07, open_face=4)
-for (x, y) in ((-0.97, 1.45), (0.97, 1.45), (-0.97, -1.45), (0.97, -1.45)):  # dark wheel arches
-    cyl(f'car_arch_{x}_{y}', 0.47, 0.06, (x, y, 0.42), M_RUBBER, CAR, rot=(0, math.radians(90), 0))
-# outside shots: a solid cabin with glossy dark glass all round and a painted roof
-M_TINT = mat('tint', (0.004, 0.005, 0.007), 0.04, 0.0)
-CABIN_OUT = [extrude_profile('car_cabin_glass', [(-2.22, 1.1), (1.2, 1.1), (0.45, 1.8), (-2.12, 1.83)], 1.76, M_TINT, CAR, 0.05),
-             box('car_roof_out', (1.72, 2.55, 0.08), (0, -0.84, 1.86), M_PAINT, CAR, bevel=0.03)]
-# inside shot: roof, pillars and see-through glass instead
-CABIN_IN = []
-CABIN_IN.append(box('car_roof', (1.72, 3.05, 0.07), (0, -0.72, 1.86), M_PAINT, CAR, bevel=0.03))
-for x in (-0.83, 0.83):
-    CABIN_IN.append(box(f'car_apillar_{x}', (0.07, 0.07, 0.86), (x, 0.88, 1.47), M_PAINT, CAR, rot=(math.radians(-38), 0, 0)))
-    CABIN_IN.append(box(f'car_bpillar_{x}', (0.07, 0.1, 0.8), (x, -0.4, 1.47), M_PAINT, CAR))
-    CABIN_IN.append(box(f'car_cpillar_{x}', (0.07, 0.1, 0.8), (x, -2.16, 1.47), M_PAINT, CAR, rot=(math.radians(8), 0, 0)))
-    CABIN_IN.append(box(f'car_sideglass_{x}', (0.02, 2.95, 0.62), (x, -0.72, 1.45), M_GLASS, CAR))
-    CABIN_IN.append(box(f'car_doorpanel_{x}', (0.05, 3.0, 0.62), (x * 1.06, -0.72, 0.82), M_DASH, CAR))
-ws = box('car_windshield', (1.62, 1.08, 0.02), (0, 0.9, 1.47), M_GLASS, CAR, rot=(math.radians(-52), 0, 0))
-CABIN_IN.append(ws)
-CABIN_IN.append(box('car_rearglass', (1.6, 0.7, 0.02), (0, -2.22, 1.48), M_GLASS, CAR, rot=(math.radians(80), 0, 0)))
-for (x, y) in ((-0.88, 1.45), (0.88, 1.45), (-0.88, -1.45), (0.88, -1.45)):
-    cyl(f'car_wheel_{x}_{y}', 0.38, 0.26, (x, y, 0.38), M_RUBBER, CAR, rot=(0, math.radians(90), 0))
-    cyl(f'car_hub_{x}_{y}', 0.2, 0.27, (x, y, 0.38), M_CHROME, CAR, rot=(0, math.radians(90), 0), verts=12)
-box('car_grille', (1.3, 0.05, 0.28), (0, 2.31, 0.78), M_CHROME, CAR)
-box('car_bumper', (1.98, 0.2, 0.22), (0, 2.33, 0.45), M_RUBBER, CAR, bevel=0.05)
-for x in (-0.66, 0.66):
-    box(f'car_headlamp_{x}', (0.36, 0.06, 0.16), (x, 2.31, 0.86), M_HEAD, CAR, bevel=0.03)
-    spot(f'car_beam_{x}', (x, 2.4, 0.86), (math.radians(86), 0, 0), 600, (1.0, 0.95, 0.86), 62, 0.45, CAR)
-    box(f'car_taillamp_{x}', (0.3, 0.05, 0.14), (x, -2.31, 0.95), M_TAIL, CAR, bevel=0.02)
-point('car_tailglow', (0, -2.6, 0.9), 15, (1, 0.05, 0.02), CAR, radius=0.3)
-# interior
-box('car_dash', (1.7, 0.5, 0.26), (0, 0.62, 1.05), M_DASH, CAR, bevel=0.05)
+# ---- the body: a downloaded classic Range Rover (CC-BY 3.0 "Range Rover" by IvOfficial, via poly.pizza) when it is
+# there (blender/fetch_assets.py), else the old primitive SUV. Our own interior (dash, wheel, seats) goes inside it.
+RR_GLB = os.path.join(ASSETS, 'car', 'range_rover.glb')
+USE_RR = os.path.exists(RR_GLB)
+RR_S = 2.9 / 3.52          # model wheelbase 3.52 units -> our 2.9 m (a long 7-seat SUV)
+RR_HEADLAMPS = (0.75, 2.22, 0.98)  # x, y, z of the headlamps on the scaled body (front is +Y)
+RR_TAILLAMPS = (0.86, -2.69, 1.0)
+
+
+def import_range_rover(parent):
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=RR_GLB)
+    new = [o for o in bpy.data.objects if o not in before]
+    root = empty('car_shell', (0, 0, 0), parent)
+    # its own seats and still wipers would sit inside ours (our 7 seats and animated wipers replace them)
+    drop = {'Car.004', 'Car.005', 'Car.006', 'Car.007', 'Car.016', 'Car.017', 'Car.018', 'Car.019', 'Car.020'}
+    for o in [o for o in new if o.name in drop]:
+        new.remove(o); bpy.data.objects.remove(o, do_unlink=True)
+    for o in new:
+        if o.parent is None:
+            o.parent = root
+        if o.type == 'MESH':
+            o.name = 'rr_' + o.name
+            for i, m in enumerate(o.data.materials):
+                if m and m.name.startswith('Glass'):
+                    o.data.materials[i] = M_GLASS  # see-through: the friends inside are lit by the dash
+                elif m:
+                    m.use_backface_culling = False  # the panels are one-sided: from inside the cabin they would vanish
+                    b = m.node_tree.nodes.get('Principled BSDF')
+                    if b:
+                        b.inputs['Roughness'].default_value = 0.35  # a little gloss for the street lights
+    # model: front is -Y, wheels at y -1.29 / 2.23, tyres touch z -1.33 -> ours: front +Y, axle centre at y 0, on the road
+    root.rotation_euler = (0, 0, math.pi)
+    root.scale = (RR_S, RR_S, RR_S)
+    root.location = (0, 0.47 * RR_S, 1.33 * RR_S)
+    return [o for o in new if o.type == 'MESH']
+
+
+if USE_RR:
+    RR_PARTS = import_range_rover(CAR)
+    CABIN_OUT, CABIN_IN = [], []
+    hx, hy, hz = RR_HEADLAMPS
+    for x in (-hx, hx):
+        box(f'car_headlamp_{x}', (0.2, 0.03, 0.12), (x, hy, hz), M_HEAD, CAR, bevel=0.02)
+        spot(f'car_beam_{x}', (x, hy + 0.1, hz), (math.radians(86), 0, 0), 600, (1.0, 0.95, 0.86), 62, 0.45, CAR)
+    tx, ty, tz = RR_TAILLAMPS
+    for x in (-tx, tx):
+        box(f'car_taillamp_{x}', (0.1, 0.03, 0.22), (x, ty, tz), M_TAIL, CAR, bevel=0.02)
+    point('car_tailglow', (0, ty - 0.7, tz), 15, (1, 0.05, 0.02), CAR, radius=0.3)
+else:
+    # lower body: wedge hood, upright tail (an old boxy SUV)
+    # open on top (face 4) so the cabin can be seen into; the paint is double-sided
+    extrude_profile('car_body', [(-2.3, 0.32), (2.3, 0.32), (2.34, 0.62), (2.25, 0.93), (1.25, 1.1), (-2.28, 1.12), (-2.33, 0.75)], 1.92, M_PAINT, CAR, 0.07, open_face=4)
+    for (x, y) in ((-0.97, 1.45), (0.97, 1.45), (-0.97, -1.45), (0.97, -1.45)):  # dark wheel arches
+        cyl(f'car_arch_{x}_{y}', 0.47, 0.06, (x, y, 0.42), M_RUBBER, CAR, rot=(0, math.radians(90), 0))
+    # outside shots: a solid cabin with glossy dark glass all round and a painted roof
+    M_TINT = mat('tint', (0.004, 0.005, 0.007), 0.04, 0.0)
+    CABIN_OUT = [extrude_profile('car_cabin_glass', [(-2.22, 1.1), (1.2, 1.1), (0.45, 1.8), (-2.12, 1.83)], 1.76, M_TINT, CAR, 0.05),
+                 box('car_roof_out', (1.72, 2.55, 0.08), (0, -0.84, 1.86), M_PAINT, CAR, bevel=0.03)]
+    # inside shot: roof, pillars and see-through glass instead
+    CABIN_IN = []
+    CABIN_IN.append(box('car_roof', (1.72, 3.05, 0.07), (0, -0.72, 1.86), M_PAINT, CAR, bevel=0.03))
+    for x in (-0.83, 0.83):
+        CABIN_IN.append(box(f'car_apillar_{x}', (0.07, 0.07, 0.86), (x, 0.88, 1.47), M_PAINT, CAR, rot=(math.radians(-38), 0, 0)))
+        CABIN_IN.append(box(f'car_bpillar_{x}', (0.07, 0.1, 0.8), (x, -0.4, 1.47), M_PAINT, CAR))
+        CABIN_IN.append(box(f'car_cpillar_{x}', (0.07, 0.1, 0.8), (x, -2.16, 1.47), M_PAINT, CAR, rot=(math.radians(8), 0, 0)))
+        CABIN_IN.append(box(f'car_sideglass_{x}', (0.02, 2.95, 0.62), (x, -0.72, 1.45), M_GLASS, CAR))
+        CABIN_IN.append(box(f'car_doorpanel_{x}', (0.05, 3.0, 0.62), (x * 1.06, -0.72, 0.82), M_DASH, CAR))
+    ws = box('car_windshield', (1.62, 1.08, 0.02), (0, 0.9, 1.47), M_GLASS, CAR, rot=(math.radians(-52), 0, 0))
+    CABIN_IN.append(ws)
+    CABIN_IN.append(box('car_rearglass', (1.6, 0.7, 0.02), (0, -2.22, 1.48), M_GLASS, CAR, rot=(math.radians(80), 0, 0)))
+    for (x, y) in ((-0.88, 1.45), (0.88, 1.45), (-0.88, -1.45), (0.88, -1.45)):
+        cyl(f'car_wheel_{x}_{y}', 0.38, 0.26, (x, y, 0.38), M_RUBBER, CAR, rot=(0, math.radians(90), 0))
+        cyl(f'car_hub_{x}_{y}', 0.2, 0.27, (x, y, 0.38), M_CHROME, CAR, rot=(0, math.radians(90), 0), verts=12)
+    box('car_grille', (1.3, 0.05, 0.28), (0, 2.31, 0.78), M_CHROME, CAR)
+    box('car_bumper', (1.98, 0.2, 0.22), (0, 2.33, 0.45), M_RUBBER, CAR, bevel=0.05)
+    for x in (-0.66, 0.66):
+        box(f'car_headlamp_{x}', (0.36, 0.06, 0.16), (x, 2.31, 0.86), M_HEAD, CAR, bevel=0.03)
+        spot(f'car_beam_{x}', (x, 2.4, 0.86), (math.radians(86), 0, 0), 600, (1.0, 0.95, 0.86), 62, 0.45, CAR)
+        box(f'car_taillamp_{x}', (0.3, 0.05, 0.14), (x, -2.31, 0.95), M_TAIL, CAR, bevel=0.02)
+    point('car_tailglow', (0, -2.6, 0.9), 15, (1, 0.05, 0.02), CAR, radius=0.3)
+
+# interior (lifted onto the Range Rover's floor, which is higher than the old primitive one)
+IZ = 0.22 if USE_RR else 0.0
+box('car_dash', (1.7 if not USE_RR else 1.5, 0.5, 0.26), (0, 0.62, 1.05 + IZ), M_DASH, CAR, bevel=0.05)
 for x, mt in ((0.3, M_GAUGE), (0.52, M_GAUGE2)):
-    cyl(f'car_gauge_{x}', 0.07, 0.01, (x, 0.36, 1.16), mt, CAR, rot=(math.radians(70), 0, 0), verts=20)
-cyl('car_radio', 0.05, 0.01, (-0.05, 0.36, 1.1), M_GAUGE2, CAR, rot=(math.radians(70), 0, 0), verts=16)
+    cyl(f'car_gauge_{x}', 0.07, 0.01, (x, 0.36, 1.16 + IZ), mt, CAR, rot=(math.radians(70), 0, 0), verts=20)
+cyl('car_radio', 0.05, 0.01, (-0.05, 0.36, 1.1 + IZ), M_GAUGE2, CAR, rot=(math.radians(70), 0, 0), verts=16)
 bm = bmesh.new()
 bmesh.ops.create_circle(bm, cap_ends=False, segments=24, radius=0.19)
 sw = obj_from_bm('car_steering', bm, M_RUBBER, CAR)
-sw.location = (0.4, 0.3, 1.22); sw.rotation_euler = (math.radians(60), 0, 0)
+sw.location = (0.4, 0.3, 1.22 + IZ); sw.rotation_euler = (math.radians(60), 0, 0)
 sk = sw.modifiers.new('skin', 'SKIN')
 for v in sw.data.skin_vertices[0].data:
     v.radius = (0.018, 0.018)
-point('car_dashglow', (0.2, 0.25, 1.3), 6.0, (0.3, 0.75, 1.0), CAR, radius=0.25)
-# a 7-seater: two in front (right-hand drive), a bench of three, one more in the back.
+point('car_dashglow', (0.2, 0.25, 1.3 + IZ), 6.0, (0.3, 0.75, 1.0), CAR, radius=0.25)
+# a 7-seater: two in front (right-hand drive), a bench of three, two jump seats in the boot.
 # The empties seat_0..seat_5 mark where each player's character sits (hip point); seat_0 is the driver.
-box('car_floor', (1.8, 4.0, 0.06), (0, -0.4, 0.48), M_DASH, CAR)
-SEATS = [(0.42, -0.2), (-0.42, -0.2), (-0.52, -1.05), (0.52, -1.05), (0.0, -1.05), (0.38, -1.85), (-0.38, -1.85)]
-for k, (x, y) in enumerate(SEATS):
+if USE_RR:
+    # (x, y, hip z): front seats on the floor, the bench on the rear-seat base over the axle, the last row in the boot,
+    # low enough that heads clear the roof (inside ~2.0 m) and knees clear the bench in front
+    SEATS = [(0.42, -0.2, 1.05), (-0.42, -0.2, 1.05), (-0.52, -1.12, 1.03), (0.52, -1.12, 1.03), (0.0, -1.12, 1.03),
+             (0.38, -2.02, 0.99), (-0.38, -2.02, 0.99)]
+else:
+    box('car_floor', (1.8, 4.0, 0.06), (0, -0.4, 0.48), M_DASH, CAR)
+    SEATS = [(x, y, 0.86) for x, y in [(0.42, -0.2), (-0.42, -0.2), (-0.52, -1.05), (0.52, -1.05), (0.0, -1.05), (0.38, -1.85), (-0.38, -1.85)]]
+for k, (x, y, hz) in enumerate(SEATS):
     wdt = 0.5 if k < 2 or k > 4 else 0.46
-    box(f'car_cushion_{k}', (wdt, 0.5, 0.14), (x, y, 0.76), M_SEAT, CAR, bevel=0.04)
-    box(f'car_seatback_{k}', (wdt, 0.12, 0.66), (x, y - 0.3, 1.1), M_SEAT, CAR, bevel=0.05, rot=(math.radians(-12), 0, 0))
+    cz = hz - 0.1  # cushion centre: the hip point sits just on top of it
+    th = 0.34 if USE_RR else 0.14  # taller cushions down to the raised floor
+    box(f'car_cushion_{k}', (wdt, 0.5, th), (x, y, hz - 0.03 - th / 2), M_SEAT, CAR, bevel=0.04)
+    box(f'car_seatback_{k}', (wdt, 0.12, 0.66), (x, y - 0.3, cz + 0.34), M_SEAT, CAR, bevel=0.05, rot=(math.radians(12), 0, 0))  # leans back
     if k < 2 or k > 4:
-        box(f'car_headrest_{k}', (0.24, 0.1, 0.16), (x, y - 0.38, 1.53), M_SEAT, CAR, bevel=0.03)
+        box(f'car_headrest_{k}', (0.24, 0.1, 0.16), (x, y - 0.38, cz + 0.77), M_SEAT, CAR, bevel=0.03)
     if k < 6:
-        empty(f'seat_{k}', (x, y + 0.02, 0.86), CAR)
+        empty(f'seat_{k}', (x, y + 0.02, hz), CAR)
 box('car_mirror', (0.24, 0.03, 0.07), (0, 0.72, 1.78), M_DASH, CAR)
 # wipers, pivoting at the bottom of the windshield
 wipers = []
+WIPER = ((0.82, 1.43, -30) if USE_RR else (1.22, 1.13, -52))  # y, z, tilt of the glass
 for x in (-0.55, 0.15):
-    piv = empty(f'wiper_pivot_{x}', (x, 1.22, 1.13), CAR)
-    piv.rotation_euler = (math.radians(-52), 0, 0)
-    arm = box(f'wiper_{x}', (0.025, 0.012, 0.66), (0, 0, 0.33), M_RUBBER, piv)
+    piv = empty(f'wiper_pivot_{x}', (x, WIPER[0], WIPER[1]), CAR)
+    piv.rotation_euler = (math.radians(WIPER[2]), 0, 0)
+    arm = box(f'wiper_{x}', (0.025, 0.012, 0.5 if USE_RR else 0.66), (0, 0, 0.25 if USE_RR else 0.33), M_RUBBER, piv)
     wipers.append(piv)
 
 # ---------------------------------------------------------------- the truck (decorated goods carrier)

@@ -3,7 +3,7 @@
 //     mountain road, the street lamps flickering and dying one by one.
 //  2. Live: inside the same car (intro_car.glb from that Blender scene) with every player's own character in the
 //     seats (the first player drives, hands on the wheel). In co-op the friends talk about their holiday plan
-//     (spoken with the browser's voices + subtitles) until the lamps go out. Then through the windshield: a
+//     (silent: subtitles only, no voices) until the lamps go out. Then through the windshield: a
 //     truck's lights in their lane, the horn, high beams, the driver yanks the wheel, the car skids, and a
 //     slow-motion shot from outside as the truck hits.
 //  3. Black, ringing ears. Then the game: you wake up on the floor of the house.
@@ -24,7 +24,6 @@ let pre = null;
 export function preloadIntro() {
   if (pre) return pre;
   const loader = new GLTFLoader();
-  try { speechSynthesis.getVoices(); } catch {} // voices load asynchronously in some browsers
   pre = Promise.all([
     fetch(VIDEO_URL).then((r) => { if (!r.ok) throw new Error('intro video ' + r.status); return r.blob(); }),
     loader.loadAsync('/models/intro_car.glb'),
@@ -62,14 +61,6 @@ function buildDialogue(players) {
   return SCRIPT.map((l) => ({ seat: who(l.s), dark: !!l.dark, text: l.text.replace(/\{n(\d)\}/g, (_, d) => name(+d)) }));
 }
 
-function pickVoices() {
-  let vs = [];
-  try { vs = speechSynthesis.getVoices() || []; } catch { return []; }
-  const en = vs.filter((v) => /^en/i.test(v.lang));
-  const indian = en.filter((v) => /IN/i.test(v.lang));
-  const pool = [...indian, ...en.filter((v) => !indian.includes(v))];
-  return pool.length ? pool : vs;
-}
 
 // ---------------------------------------------------------------- sound (built on the game's audio engine)
 function introSound(audio) {
@@ -300,17 +291,23 @@ function buildLive(assets, players, hooks = {}) {
   });
   lampsGlow(car);
   rig.updateMatrixWorld(true);
-  const dash = new THREE.PointLight(0x46b8ff, 1.4, 3.2, 1.5); dash.position.set(0.15, 1.28, -0.35); rig.add(dash);
-  const amber = new THREE.PointLight(0xff9a40, 0.5, 2, 1.5); amber.position.set(0.5, 1.2, -0.45); rig.add(amber);
-  [-0.66, 0.66].forEach((x) => {
-    const s = new THREE.SpotLight(0xfff0dc, 260, 60, 0.5, 0.55, 1.4); s.position.set(x, 0.86, -2.4);
-    s.target.position.set(x * 1.6, -0.6, -26); rig.add(s, s.target);
+  // the Range Rover's cabin floor is higher than the old car's: everything inside is lifted by this much
+  const seat0 = new THREE.Vector3(); if (seats[0]) seats[0].getWorldPosition(seat0);
+  const lift = seats[0] ? seat0.y - 0.86 : 0;
+  const dash = new THREE.PointLight(0x46b8ff, 1.4, 3.2, 1.5); dash.position.set(0.15, 1.28 + lift, -0.35); rig.add(dash);
+  const amber = new THREE.PointLight(0xff9a40, 0.5, 2, 1.5); amber.position.set(0.5, 1.2 + lift, -0.45); rig.add(amber);
+  const lampAt = [];
+  car.traverse((o) => { if (o.isMesh && /car_headlamp/.test(o.name)) { const p = new THREE.Vector3(); o.getWorldPosition(p); lampAt.push(p); } });
+  if (lampAt.length < 2) lampAt.splice(0, lampAt.length, new THREE.Vector3(-0.66, 0.86, -2.4), new THREE.Vector3(0.66, 0.86, -2.4));
+  lampAt.slice(0, 2).forEach((p) => {
+    const s = new THREE.SpotLight(0xfff0dc, 260, 60, 0.5, 0.55, 1.4); s.position.set(p.x, p.y, p.z - 0.1);
+    s.target.position.set(p.x * 1.6, -0.6, -26); rig.add(s, s.target);
   });
 
   // the players, in their seats (seat 0 is the driver, right-hand drive)
   const people = [];
   players.slice(0, 6).forEach((p, i) => {
-    const ch = createSeatedCharacter(p.char, i);
+    const ch = createSeatedCharacter(p.char, i, { knees: i === 5 ? 0.75 : 0.28 }); // the boot seat: knees right up
     const seat = seats[i];
     if (!ch || !seat) return;
     const wp = new THREE.Vector3(); seat.getWorldPosition(wp);
@@ -363,6 +360,7 @@ function buildLive(assets, players, hooks = {}) {
   glass.frustumCulled = false; glass.visible = false; scene.add(glass);
 
   const cam = new THREE.PerspectiveCamera(56, innerWidth / innerHeight, 0.05, 400);
+  if (window.__hm) window.__hm.introLive = { scene, rig, cam, car, people }; // for automated tests
   const v = new THREE.Vector3(), v2 = new THREE.Vector3();
   let travelled = 0, tDark = Infinity, tTruck = Infinity, hit = -1, lampState = 0, truckZ0 = 0;
   const S = { timeScale: 1, outside: false, done: false, talk: -1 };
@@ -487,13 +485,13 @@ function buildLive(assets, players, hooks = {}) {
       S.timeScale = S.outside ? SLOWMO : 1;
       if (T < 0) { // on the dashboard, looking back at everyone
         cam.fov = 70;
-        rig.localToWorld(v.set(0.04 + Math.sin(t * 0.7) * 0.03, 1.52 + bump, -1.0));
-        rig.localToWorld(v2.set(0, 1.0 + Math.sin(t * 0.5) * 0.03, 1.6));
+        rig.localToWorld(v.set(0.04 + Math.sin(t * 0.7) * 0.03, 1.52 + lift * 0.6 + bump, lift ? -0.55 : -1.0)); // inside the windshield
+        rig.localToWorld(v2.set(0, 1.0 + lift + Math.sin(t * 0.5) * 0.03, 1.6));
         cam.position.copy(v); cam.lookAt(v2);
       } else if (!S.outside) { // from behind the front seats, out through the windshield
         cam.fov = 50;
-        rig.localToWorld(v.set(0.06 + (Math.random() - 0.5) * shake, 1.62 + bump + (Math.random() - 0.5) * shake, 0.66));
-        rig.localToWorld(v2.set(0.1, 1.2 - sw * 0.2, -14));
+        rig.localToWorld(v.set(0.06 + (Math.random() - 0.5) * shake, 1.62 + lift * 0.8 + bump + (Math.random() - 0.5) * shake, 0.66));
+        rig.localToWorld(v2.set(0.1, 1.2 + lift - sw * 0.2, -14));
         cam.position.copy(v); cam.lookAt(v2);
         cam.rotation.z += -sw * 0.1 + (Math.random() - 0.5) * shake;
       } else { // outside, low at the roadside, in slow motion: the car skidding sideways into the truck's path
@@ -543,8 +541,6 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
 
   // ---- the conversation
   const lines = buildDialogue(players);
-  const voices = pickVoices();
-  const PITCH = [0.95, 1.25, 0.82, 1.4, 1.05, 1.15];
   let nextIx = 0, lineEnd = Infinity, speaking = false, talkDone = false;
   const colorOf = (seat) => { const c = players[seat]?.color; return typeof c === 'number' ? '#' + c.toString(16).padStart(6, '0') : (c || '#e6dcc2'); };
   function say(ix) {
@@ -555,16 +551,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     sub.style.opacity = 1;
     const fallback = Math.max(1.6, l.text.length * 0.062 + 0.6);
     lineEnd = t + fallback;
-    try {
-      const u = new SpeechSynthesisUtterance(l.text);
-      if (voices.length) u.voice = voices[l.seat % voices.length];
-      u.pitch = PITCH[l.seat % PITCH.length]; u.rate = 1.04; u.volume = 1;
-      // once a voice really starts, speech sets the pace (the timer is only a safety net); without voices the
-      // subtitles run on reading speed
-      u.onstart = () => { if (speaking && nextIx === ix) lineEnd = Math.max(lineEnd, t + fallback + 2.5); };
-      u.onend = () => { if (speaking && nextIx === ix) lineEnd = Math.min(lineEnd, t + 0.25); };
-      speechSynthesis.cancel(); speechSynthesis.speak(u);
-    } catch {}
+    // no voices: the friends stay silent, the conversation is only shown as subtitles at reading speed
   }
   function nextLine() {
     speaking = false; live?.setTalk(-1); sub.style.opacity = 0;
