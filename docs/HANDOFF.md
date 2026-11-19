@@ -346,3 +346,16 @@ without tunnel.json it falls back to a random trycloudflare.com quick tunnel).
 ## 8. Assets & credits
 See README "Credits". Characters by Quaternius (CC0 / one CC-BY "Soldier"), scream CC0 from Wikimedia Commons,
 fonts from Google Fonts (OFL). Monster built by `blender/build_characters.py`.
+
+## 7d. Always-on service (macOS LaunchAgent)
+
+The live game runs as a background service, independent of any Claude session:
+- Install: `~/chudail-busters-live` (a clone of `main` + node_modules). Log: `server.log`; current link: `public-link.txt`.
+- Service: `~/Library/LaunchAgents/com.chudailbusters.live.plist` runs `caffeinate -i node server.js --online` on port 3000,
+  starts at login (RunAtLoad) and restarts on any crash (KeepAlive). `caffeinate -i` stops idle sleep; closing the lid
+  or shutting down still takes the game offline until the Mac wakes.
+- A dropped tunnel reopens by itself (server.js `startTunnel`), but a quick tunnel then gets a NEW random link.
+  The fixed address needs the named tunnel in 7c.
+- Deploy an update: `git -C ~/chudail-busters-live pull && launchctl kickstart -k gui/$(id -u)/com.chudailbusters.live`
+- Stop for good: `launchctl bootout gui/$(id -u)/com.chudailbusters.live` (and delete the plist).
+- Do not start another server on port 3000 (e.g. the "hollowmere" preview config); test on 3001-3004.
