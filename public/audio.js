@@ -187,11 +187,11 @@ export class AudioSys {
       s2.connect(bp); bp.connect(g2); g2.connect(dest); s2.start(t + 0.1, rnd(0, 2), 0.7);
     }
   }
-  // real recorded steps (CC0, see public/sounds/steps/LICENSE.txt): stone for the chequered tiles, three takes on wood
+  // real recorded steps (see public/sounds/steps/LICENSE.txt): nine heel-on-tile takes for the chequered tiles, three on wood
   loadSteps() {
     if (this.stepsLoading || !this.ctx) return;
     this.stepsLoading = true;
-    for (const n of ['stone01', 'wood01', 'wood02', 'wood03']) this.loadSample('step_' + n, `/sounds/steps/${n}.m4a`);
+    for (const n of ['tile0', 'tile1', 'tile2', 'tile3', 'tile4', 'tile5', 'tile6', 'tile7', 'tile8', 'wood01', 'wood02', 'wood03']) this.loadSample('step_' + n, `/sounds/steps/${n}.m4a`);
   }
   footstep(vol, pos, surface) {
     const ctx = this.ctx, t = ctx.currentTime;
@@ -199,10 +199,15 @@ export class AudioSys {
     if (pos) { const p = this.panner(pos.x, 0.1, pos.z, 1.5, 1.4); dest = p; this.out(p, 0.25); }
     else { const g0 = ctx.createGain(); g0.gain.value = 1; g0.connect(this.master); const w = ctx.createGain(); w.gain.value = surface === 'tile' ? 0.3 : 0.18; g0.connect(w); w.connect(this.reverb); dest = g0; }
     const sm = this.samples || {};
-    const take = surface === 'tile' ? sm.step_stone01 : [sm.step_wood01, sm.step_wood02, sm.step_wood03][Math.floor(Math.random() * 3)];
+    // a different take every step (never the same one twice in a row): 9 heel-on-tile hits, 3 on wood
+    const takes = surface === 'tile' ? [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => sm['step_tile' + k]) : [sm.step_wood01, sm.step_wood02, sm.step_wood03];
+    let pickN = Math.floor(Math.random() * takes.length);
+    if (takes.length > 1 && pickN === this.lastTake) pickN = (pickN + 1) % takes.length;
+    this.lastTake = pickN;
+    const take = takes[pickN];
     if (take) {
-      const s = this.src(take); s.playbackRate.value = surface === 'tile' ? rnd(0.9, 1.06) : rnd(0.88, 1.08);
-      const eq = ctx.createBiquadFilter(); eq.type = 'lowpass'; eq.frequency.value = surface === 'tile' ? 6500 : 4200; // no harsh fizz
+      const s = this.src(take); s.playbackRate.value = surface === 'tile' ? rnd(0.94, 1.05) : rnd(0.88, 1.08);
+      const eq = ctx.createBiquadFilter(); eq.type = 'lowpass'; eq.frequency.value = surface === 'tile' ? 9000 : 4200; // no harsh fizz
       const g = ctx.createGain(); g.gain.value = vol * 2.1 * rnd(0.85, 1.1);
       s.connect(eq); eq.connect(g); g.connect(dest); s.start(t);
       if (surface === 'wood' && Math.random() < 0.14) this.floorCreak(vol, t, dest);

@@ -337,9 +337,10 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   The server's `moveEntity` (ghost and crawler) now uses `resolveSolid`; before, she walked through lockers,
   wardrobes and beds. Client: when she climbs a wall (`crawl` 2/3) and a locker/wardrobe stands against that wall
   within 1.6 m (`furnitureAlongWall` in main.js), she takes the ceiling instead of sinking into it.
-- **Footsteps** are real recordings (CC0, TinyWorlds/OpenGameArt): `public/sounds/steps/{stone01,wood01-03}.m4a`
+- **Footsteps** are real recordings: `public/sounds/steps/wood01-03.m4a` (CC0, TinyWorlds) and, since the stone one was
+  disliked, `tile0-8.m4a` (CC-BY 3.0, congusbongus/OpenGameArt; never the same take twice in a row)
   (mono AAC, loudness-normalised, so Safari/iOS decode them). `audio.loadSteps()` (called with the scream sample);
-  `footstep()` plays stone on the chequered tiles (`surface === 'tile'`) and a random wood take elsewhere, with small
+  `footstep()` plays a tile take on the chequered tiles (`surface === 'tile'`) and a wood take elsewhere, with small
   pitch/volume variation; the synthesised step is only a fallback (its tile hiss was the "bad tile sound").
   `audio.floorCreak()` (renamed so it does not override the ambient `creak(x, y, z)`).
 - **Scarier ghost.**

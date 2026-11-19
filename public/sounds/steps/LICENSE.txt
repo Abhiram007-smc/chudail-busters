@@ -1,3 +1,10 @@
-Footstep recordings: "Different steps on wood, stone, leaves, gravel and mud" by TinyWorlds,
+Wood footsteps (wood01-03): "Different steps on wood, stone, leaves, gravel and mud" by TinyWorlds,
 https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
 License: CC0 1.0 (public domain). Converted from OGG to mono AAC.
+
+Tile footsteps (tile0-8): "Footsteps on different surfaces" (tile set) by congusbongus,
+https://opengameart.org/content/footsteps-on-different-surfaces
+derived from "footstep-concrete.wav" by swuing (https://freesound.org/people/swuing/sounds/38873/)
+and "Squeaky footstep.wav" by ceberation (https://freesound.org/people/ceberation/sounds/235524/).
+License: CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Converted from OGG to mono AAC, loudness-matched,
+60 ms of silence added.

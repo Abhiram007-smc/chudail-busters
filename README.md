@@ -145,7 +145,8 @@ To rebuild the Blender models:
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
 - Intro and ending car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
-- Footsteps: "Different steps on wood, stone, leaves, gravel and mud" by **TinyWorlds** ([OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)), CC0
+- Wood footsteps: "Different steps on wood, stone, leaves, gravel and mud" by **TinyWorlds** ([OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)), CC0
+- Tile footsteps: "Footsteps on different surfaces" (tile) by **congusbongus** ([OpenGameArt](https://opengameart.org/content/footsteps-on-different-surfaces)), from recordings by **swuing** and **ceberation** (Freesound), CC-BY 3.0
 - Horn in the intro: "Car Horn.wav" by **15HPanska_Ruttner_Jan** (Wikimedia Commons), CC0
 - After the crash: the drag into the house and the ending are live three.js scenes (`public/drag.js`) with the game's own characters and Chudail
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0
