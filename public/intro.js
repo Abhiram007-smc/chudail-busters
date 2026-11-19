@@ -13,7 +13,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createSeatedCharacter } from './entities.js';
 
 const VIDEO_URL = '/video/intro.mp4';
-export const INTRO = { black: 2.8, maxSeconds: 75 };
+export const INTRO = { black: 2.8, dragAfter: 1.5, maxSeconds: 95 };
 const SPEED = 15; // m/s, the car
 const TRUCK_V = 19; // m/s, the truck
 // truck sequence, seconds after the camera turns to the windshield
@@ -29,7 +29,9 @@ export function preloadIntro() {
     fetch(VIDEO_URL).then((r) => { if (!r.ok) throw new Error('intro video ' + r.status); return r.blob(); }),
     loader.loadAsync('/models/intro_car.glb'),
     loader.loadAsync('/models/intro_truck.glb'),
-  ]).then(([blob, car, truck]) => ({ videoURL: URL.createObjectURL(blob), car: car.scene, truck: truck.scene }))
+    // after the crash she drags you to the house (rendered in Blender: blender/build_drag.py); optional
+    fetch('/video/drag.mp4').then((r) => (r.ok ? r.blob() : null)).catch(() => null),
+  ]).then(([blob, car, truck, drag]) => ({ videoURL: URL.createObjectURL(blob), car: car.scene, truck: truck.scene, dragURL: drag ? URL.createObjectURL(drag) : null }))
     .catch((e) => { console.warn('intro unavailable:', e.message); pre = null; return null; });
   return pre;
 }
@@ -90,7 +92,8 @@ function introSound(audio) {
   [100, 200, 300, 120].forEach((f, i) => { const o = ctx.createOscillator(); o.type = i === 3 ? 'square' : 'sawtooth'; o.frequency.value = f; const g = ctx.createGain(); g.gain.value = i === 3 ? 0.25 : 0.5 / (i + 1); o.connect(g); g.connect(hf); o.start(); nodes.push(o); });
   const crk = noise(); const crf = ctx.createBiquadFilter(); crf.type = 'highpass'; crf.frequency.value = 2500; crk.connect(crf); crf.connect(hum); crk.start(); nodes.push(crk);
   const now = () => ctx.currentTime;
-  let horn = null;
+  let horn = null, scr = null;
+  if (!(audio.samples && audio.samples.horn)) audio.loadSample?.('horn', '/sounds/car_horn.mp3');
   const api = {
     start() { eng.gain.setTargetAtTime(0.16, now(), 0.8); wg.gain.setTargetAtTime(0.09, now(), 1.2); },
     inside() { eng.gain.setTargetAtTime(0.2, now(), 0.3); lp.frequency.setTargetAtTime(110, now(), 0.3); wg.gain.setTargetAtTime(0.05, now(), 0.3); },
@@ -128,9 +131,21 @@ function introSound(audio) {
       const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = 95; env(og, t + 0.36, 0.005, 0.12, 0.08);
       o.connect(og); og.connect(bus); o.start(t + 0.3); o.stop(t + 0.5);
     },
-    // a big truck's air horn: a harsh, slightly out-of-tune chord with a hard attack, rising as it closes in
-    horn(dur = 1.4, vol = 0.32) {
+    // a real car horn recording (public/sounds/car_horn.mp3); the truck's is pitched down and rises as it closes in
+    hornSample(dur, vol, rate, rise, track) {
+      const b = audio.samples && audio.samples.horn;
+      if (!b) return false;
+      const t = now(), s = ctx.createBufferSource(), g = ctx.createGain();
+      s.buffer = b; s.playbackRate.setValueAtTime(rate, t); s.playbackRate.linearRampToValueAtTime(rate * (1 + rise), t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.linearRampToValueAtTime(vol * 1.2, t + dur);
+      g.gain.setValueAtTime(vol * 1.2, t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.1);
+      s.connect(g); g.connect(bus); audio.out?.(g, 0.2); s.start(t, 0.03); s.stop(t + dur + 0.12);
+      if (track) horn = { out: g, os: [s], end: t + dur };
+      return true;
+    },
+    horn(dur = 1.4, vol = 0.32) { // the truck
       api.hornOff();
+      if (api.hornSample(dur, vol * 2.4, 0.78, 0.07, true)) return;
       const t = now(), out = ctx.createGain(), sh = drive(4), lpf = ctx.createBiquadFilter(), f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter();
       lpf.type = 'lowpass'; lpf.frequency.value = 3800;
       f1.type = 'peaking'; f1.frequency.value = 650; f1.gain.value = 9; f1.Q.value = 1.4;
@@ -149,6 +164,10 @@ function introSound(audio) {
       horn = { out, os, end: t + dur };
       out.gain.setValueAtTime(vol * 1.25, t + dur); out.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.12);
       os.forEach((o) => o.stop(t + dur + 0.15));
+    },
+    carHorn() { // our driver leaning on the horn, two panicked blasts
+      api.hornSample(0.22, 0.55, 1.0, 0, false);
+      setTimeout(() => api.hornSample(0.7, 0.6, 1.0, 0, false), 300);
     },
     hornOff() { if (horn && horn.end > now()) { const t = now(); horn.out.gain.cancelScheduledValues(t); horn.out.gain.setTargetAtTime(0.0001, t, 0.03); horn.os.forEach((o) => { try { o.stop(t + 0.2); } catch {} }); } horn = null; },
     screech() {
@@ -178,6 +197,37 @@ function introSound(audio) {
         b.type = 'triangle'; b.frequency.value = rnd(2500, 7000); env(bg, tt, 0.002, rnd(0.02, 0.08), rnd(0.05, 0.2));
         b.connect(bg); bg.connect(audio.master); b.start(tt); b.stop(tt + 0.3);
       }
+    },
+    crunch(vol = 0.3) { // a footstep in deep snow
+      const t = now(), n = noise(), lpf = ctx.createBiquadFilter(), g = ctx.createGain();
+      lpf.type = 'lowpass'; lpf.frequency.value = rnd(700, 1100); env(g, t, 0.01, vol, 0.16);
+      n.connect(lpf); lpf.connect(g); g.connect(bus); n.start(t, rnd(0, 1), 0.25);
+    },
+    scrape(on) { // your body sliding through the snow
+      if (on && !scr) {
+        const n = noise(), bp = ctx.createBiquadFilter(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+        bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.7; g.gain.value = 0.1;
+        lfo.frequency.value = 1.47; lg.gain.value = 0.07; lfo.connect(lg); lg.connect(g.gain);
+        n.connect(bp); bp.connect(g); g.connect(bus); n.start(); lfo.start(); scr = { n, lfo, g };
+      } else if (!on && scr) { const t = now(); scr.g.gain.setTargetAtTime(0.0001, t, 0.1); scr.n.stop(t + 0.6); scr.lfo.stop(t + 0.6); scr = null; }
+    },
+    thud() { // dragged up a wooden step
+      const t = now(), o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+      env(g, t, 0.004, 0.5, 0.2); o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.3); api.crunch(0.15);
+    },
+    creak() { // the door swinging open on its own
+      const t = now(), o = ctx.createOscillator(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.linearRampToValueAtTime(260, t + 0.7); o.frequency.linearRampToValueAtTime(190, t + 1.3);
+      bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 9;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22, t + 0.15); g.gain.setValueAtTime(0.22, t + 1.1); g.gain.linearRampToValueAtTime(0, t + 1.4);
+      const am = ctx.createOscillator(), ag = ctx.createGain(); am.frequency.value = 23; ag.gain.value = 0.12; am.connect(ag); ag.connect(g.gain);
+      o.connect(bp); bp.connect(g); g.connect(bus); o.start(t); am.start(t); o.stop(t + 1.5); am.stop(t + 1.5);
+    },
+    slam() { // the door shuts behind you
+      const t = now(), n = noise(), lpf = ctx.createBiquadFilter(), g = ctx.createGain(), o = ctx.createOscillator(), og = ctx.createGain();
+      lpf.type = 'lowpass'; lpf.frequency.value = 1400; env(g, t, 0.003, 0.9, 0.5); n.connect(lpf); lpf.connect(g); g.connect(audio.master); n.start(t); n.stop(t + 0.7);
+      o.frequency.setValueAtTime(65, t); o.frequency.exponentialRampToValueAtTime(30, t + 0.5); env(og, t, 0.004, 1.0, 0.6); o.connect(og); og.connect(audio.master); o.start(t); o.stop(t + 0.8);
+      audio.out?.(g, 0.6);
     },
     ring() { // ears ringing in the dark, a slow heartbeat under it
       const t = now(), o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 3900;
@@ -544,6 +594,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     for (let s = 0; s < TR.swerve; s += 1.1) at(s, () => snd?.wiper());
     at(TR.horn1, () => snd?.horn(0.9, 0.22));
     at(TR.horn2, () => snd?.horn(1.6, 0.38));
+    at(TR.horn2 + 0.3, () => snd?.carHorn());
     at(TR.swerve, () => snd?.screech());
     at(TR.outside, () => snd?.slow());
   }
@@ -558,6 +609,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     if (!skipped) {
       setTimeout(() => { fade.style.transition = 'background 0.5s'; fade.style.background = '#000'; }, 90);
       setTimeout(() => snd?.ring(), 700);
+      if (assets.dragURL) { setTimeout(startDrag, INTRO.dragAfter * 1000); return; } // ...then she comes for you
     } else snd?.stop();
     setTimeout(() => {
       if (aborted) return;
@@ -568,18 +620,53 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
       onDone();
     }, skipped ? 400 : INTRO.black * 1000);
   }
+  // ---- after the crash: she drags you through the snow into the house (blender/build_drag.py, 24 fps)
+  let dragDone = false;
+  const dragCues = [];
+  function startDrag() {
+    if (aborted || dragDone) return;
+    phase = 'drag';
+    live?.dispose(); live = null;
+    el.classList.remove('live');
+    video.onended = () => endDrag(false); video.onerror = () => endDrag(false);
+    video.onplaying = () => { fade.style.transition = 'opacity 1.4s'; fade.style.opacity = 0; };
+    video.src = assets.dragURL; video.currentTime = 0;
+    const dc = (at, fn) => dragCues.push({ at, fn });
+    [1.0, 1.7, 2.35, 2.95].forEach((s, k) => dc(s, () => snd?.crunch(0.18 + k * 0.07))); // she walks up to you
+    dc(3.55, () => snd?.scrape(true));
+    for (let s = 3.6; s < 9.2; s += 0.68) dc(s, () => snd?.crunch(0.32));
+    dc(9.2, () => snd?.scrape(false));
+    [9.27, 9.51, 9.75, 9.99, 10.2].forEach((s) => dc(s, () => snd?.thud()));
+    dc(10.2, () => snd?.creak());
+    video.play().catch(() => endDrag(false));
+  }
+  function endDrag(skipped) {
+    if (dragDone) return;
+    dragDone = true; phase = 'black';
+    fade.style.transition = skipped ? 'opacity 0.25s' : 'none'; fade.style.opacity = 1; fade.style.background = '#000';
+    if (!skipped) snd?.slam(); snd?.scrape(false);
+    setTimeout(() => {
+      if (aborted) return;
+      video.pause(); video.removeAttribute('src'); video.load();
+      el.className = ''; removeEventListener('keydown', kd); removeEventListener('keyup', ku);
+      setTimeout(() => snd?.stop(), skipped ? 0 : 2500);
+      onDone();
+    }, skipped ? 400 : 900);
+  }
+  function skipAll() { if (phase === 'drag') endDrag(true); else finish(true); }
+
   function abort() { // the game ended or this player died while the intro was still running
     aborted = true;
     try { speechSynthesis.cancel(); } catch {}
     if (done && !live && el.className === '') return;
-    done = true; snd?.stop();
+    done = true; dragDone = true; snd?.stop();
     video.pause(); video.removeAttribute('src'); video.load();
     live?.dispose(); live = null;
     el.className = ''; removeEventListener('keydown', kd); removeEventListener('keyup', ku);
   }
 
   let holding = false;
-  const kd = (e) => { if (e.code === 'Space') { holding = true; e.preventDefault(); } if (e.code === 'Escape') finish(true); };
+  const kd = (e) => { if (e.code === 'Space') { holding = true; e.preventDefault(); } if (e.code === 'Escape') skipAll(); };
   const ku = (e) => { if (e.code === 'Space') holding = false; };
   addEventListener('keydown', kd); addEventListener('keyup', ku);
   let truckCued = false;
@@ -588,8 +675,9 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
     frame() {
       // real time, so a throttled or background tab doesn't stretch the intro (the ghost wakes up on the server's clock)
       const nowMs = performance.now(); const rdt = Math.min(0.25, (nowMs - lastNow) / 1000); lastNow = nowMs;
-      if (!done && nowMs - started > INTRO.maxSeconds * 1000) { finish(true); return; }
-      if (holding) { holdT += rdt; if (holdT > 0.7) finish(true); } else holdT = Math.max(0, holdT - rdt * 2);
+      if (!dragDone && nowMs - started > INTRO.maxSeconds * 1000) { skipAll(); return; }
+      if (holding) { holdT += rdt; if (holdT > 0.7) { holding = false; skipAll(); } } else holdT = Math.max(0, holdT - rdt * 2);
+      if (phase === 'drag') { for (const c of dragCues) if (!c.fired && video.currentTime >= c.at) { c.fired = true; c.fn(); } return; }
       skipEl.style.setProperty('--p', Math.min(1, holdT / 0.7));
       const clock = phase === 'video' ? video.currentTime : vidLen + t;
       for (const c of cues) if (!c.fired && clock >= c.at) { c.fired = true; c.fn(); }
@@ -602,7 +690,7 @@ export function playIntro({ renderer, assets, players, audio, calm, onDone }) {
         renderer.render(live.scene, live.cam);
       }
     },
-    skip: () => finish(true),
+    skip: skipAll,
     abort,
   };
 }

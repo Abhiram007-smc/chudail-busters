@@ -23,7 +23,7 @@ PREVIEW = '--preview' in argv
 FPS = 24
 E1, E2, E3 = (1, 84), (85, 236), (237, 300)
 F_END = 300
-HOUSE_Y = 34.0
+HOUSE_Y = 12.0  # the crash happened right by the old house
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
@@ -130,7 +130,7 @@ fm = bpy.data.materials.new('fog'); fm.use_nodes = True; fnt = fm.node_tree; fnt
 pv = fnt.nodes.new('ShaderNodeVolumePrincipled'); pv.inputs['Density'].default_value = 0.014; pv.inputs['Anisotropy'].default_value = 0.4
 pv.inputs['Color'].default_value = (0.78, 0.82, 0.9, 1)
 fnt.links.new(pv.outputs[0], fnt.nodes['Material Output'].inputs['Volume']); fogbox.data.materials.append(fm)
-moon = light('SUN', 'moon', (0, 0, 20), 0.35, (0.6, 0.7, 1.0), rot=(math.radians(55), 0, math.radians(200)))
+moon = light('SUN', 'moon', (0, 0, 20), 1.0, (0.6, 0.7, 1.0), rot=(math.radians(55), 0, math.radians(200)))
 
 # ---------------------------------------------------------------- ground: snow, the trench she drags you through
 M_SNOW = mat('snow', (0.8, 0.84, 0.92), 0.7)
@@ -147,8 +147,8 @@ for p in ground.data.polygons:
     p.use_smooth = True
 
 # ---------------------------------------------------------------- the house: an old hill-station mansion
-M_WALL = mat('wall', (0.16, 0.15, 0.14), 0.9)
-M_TRIM = mat('trim', (0.32, 0.3, 0.27), 0.8)
+M_WALL = mat('wall', (0.06, 0.055, 0.05), 0.9)
+M_TRIM = mat('trim', (0.16, 0.15, 0.13), 0.8)
 M_ROOF = bpy.data.materials.new('roof'); M_ROOF.use_nodes = True
 rn = M_ROOF.node_tree; rb = rn.nodes['Principled BSDF']
 geo = rn.nodes.new('ShaderNodeNewGeometry'); sxyz = rn.nodes.new('ShaderNodeSeparateXYZ'); rn.links.new(geo.outputs['Normal'], sxyz.inputs[0])
@@ -158,7 +158,10 @@ rn.links.new(mr.outputs[0], rm.inputs[0]); rn.links.new(rm.outputs[2], rb.inputs
 M_GLASS = mat('window', (0.01, 0.012, 0.015), 0.08)
 M_LIT = mat('lit_window', (0.2, 0.1, 0.03), 0.4, emit=(1.0, 0.45, 0.12), strength=2.2)
 M_DOOR = mat('door', (0.07, 0.035, 0.02), 0.6)
-M_VOID = mat('void', (0, 0, 0), 1.0)
+M_VOID = bpy.data.materials.new('void'); M_VOID.use_nodes = True  # pure black: reflects nothing
+_vn = M_VOID.node_tree; _vn.nodes.remove(_vn.nodes['Principled BSDF'])
+_em = _vn.nodes.new('ShaderNodeEmission'); _em.inputs['Color'].default_value = (0, 0, 0, 1); _em.inputs['Strength'].default_value = 0
+_vn.links.new(_em.outputs[0], _vn.nodes['Material Output'].inputs['Surface'])
 HW, HD, HH = 9.0, 5.5, 7.6  # half width, half depth, wall height
 box('house_body', (HW * 2, HD * 2, HH), (0, HOUSE_Y + HD, HH / 2), M_WALL)
 box('house_band', (HW * 2 + 0.2, HD * 2 + 0.2, 0.25), (0, HOUSE_Y + HD, HH / 2), M_TRIM)
@@ -192,7 +195,7 @@ for row, z in enumerate((2.3, 5.6)):
         lit = (row == 1 and x == 4.8)
         box(f'win_{row}_{x}', (1.1, 0.1, 1.7), (x, HOUSE_Y - 0.03, z), M_LIT if lit else M_GLASS)
         box(f'winframe_{row}_{x}', (1.35, 0.12, 0.12), (x, HOUSE_Y - 0.06, z - 0.92), M_TRIM)
-light('POINT', 'window_glow', (4.8, HOUSE_Y + 0.6, 5.6), 60, (1.0, 0.5, 0.15), size=0.5)
+light('POINT', 'window_glow', (4.8, HOUSE_Y + 0.6, 5.6), 160, (1.0, 0.5, 0.15), size=0.5)
 # the door: swings open on nothing
 box('doorframe', (2.0, 0.2, 2.9), (0, HOUSE_Y - 0.02, 1.35 + 0.9), M_TRIM)
 box('doorway_void', (1.6, 3.0, 2.6), (0, HOUSE_Y + 1.4, 1.3 + 0.9), M_VOID)
@@ -201,9 +204,9 @@ door = box('door', (1.56, 0.08, 2.55), (0.78, 0, 1.275), M_DOOR, bevel=0.01); do
 for k in range(3):
     box(f'door_panel_{k}', (1.2, 0.03, 0.6), (0.78, -0.05, 0.5 + k * 0.8), M_TRIM).parent = hinge
 key_seq(hinge, 'rotation_euler', [(1, Euler((0, 0, 0))), (246, Euler((0, 0, 0))), (262, Euler((0, 0, math.radians(-105))))])
-porch_lamp = light('POINT', 'porch_lamp', (0, HOUSE_Y - 1.0, HH * 0.5), 35, (1.0, 0.6, 0.25), size=0.1)
+porch_lamp = light('POINT', 'porch_lamp', (0, HOUSE_Y - 1.0, HH * 0.5), 90, (1.0, 0.6, 0.25), size=0.1)
 for f in range(1, F_END + 1, 2):  # an old bulb, buzzing on and off
-    porch_lamp.data.energy = 35 if random.random() < 0.7 else 2
+    porch_lamp.data.energy = 90 if random.random() < 0.7 else 5
     porch_lamp.data.keyframe_insert('energy', frame=f)
 
 # ---------------------------------------------------------------- pines and the wreck behind you
@@ -317,13 +320,13 @@ for p in gown.data.polygons:
 attach(gown, 'spine')
 
 # ---------------------------------------------------------------- your legs (E2: dragged by the right ankle)
-M_JEANS = mat('jeans', (0.03, 0.04, 0.07), 0.8)
+M_JEANS = mat('jeans', (0.05, 0.08, 0.16), 0.75)
 M_SHOE = mat('shoe', (0.02, 0.02, 0.02), 0.6)
 legs = link(bpy.data.objects.new('your_legs', None))
 for sx in (-1, 1):
-    lg = cyl(f'leg_{sx}', 0.085, 0.065, 0.95, (sx * 0.12, 0.47, 0), M_JEANS, rot=(math.radians(-90), 0, 0))
+    lg = cyl(f'leg_{sx}', 0.062, 0.048, 0.95, (sx * 0.11, 0.475, 0), M_JEANS, rot=(math.radians(-90), 0, 0))
     lg.parent = legs
-    sh = box(f'shoe_{sx}', (0.11, 0.28, 0.1), (sx * 0.12, 1.02, 0.02), M_SHOE, bevel=0.02); sh.parent = legs
+    sh = box(f'shoe_{sx}', (0.1, 0.12, 0.26), (sx * 0.11, 1.0, 0.08), M_SHOE, bevel=0.02); sh.parent = legs
 
 # ---------------------------------------------------------------- animation
 def pose(frame, name, rx=0.0, ry=0.0, rz=0.0):
@@ -337,68 +340,69 @@ def her_at(frame, loc, yaw):
     rig.keyframe_insert('location', frame=frame); rig.keyframe_insert('rotation_euler', frame=frame)
 
 
-cam_d = bpy.data.cameras.new('cam'); cam_d.lens = 22; cam_d.clip_start = 0.02; cam_d.clip_end = 300
+cam_d = bpy.data.cameras.new('cam'); cam_d.lens = 18; cam_d.clip_start = 0.02; cam_d.clip_end = 300
 cam_d.dof.use_dof = True; cam_d.dof.aperture_fstop = 2.0
 cam = link(bpy.data.objects.new('cam', cam_d)); sc.camera = cam
 focus = link(bpy.data.objects.new('focus', None)); cam_d.dof.focus_object = focus
+# the burning wreck behind you: a warm flickering glow that follows the camera (lights her, your legs)
+glow = light('POINT', 'fire_fill', (0, 0, 0), 260, (1.0, 0.45, 0.15), size=0.8)
+glow.parent = cam; glow.location = (0.4, 1.4, 2.2)
+for f in range(1, F_END + 1, 2):
+    glow.data.energy = random.uniform(170, 320) * (0.2 if f > 246 else 1); glow.data.keyframe_insert('energy', frame=f)
 
-# E1: on your back in the snow, looking up past your feet; the fire flickers; she walks in and leans over you
+# E1: on your back in the snow, looking up; the wreck burns behind her as she walks out of its glow and leans over you
 for f in range(E1[0], E1[1] + 1, 2):
     k = (f - E1[0]) / (E1[1] - E1[0])
     cam.location = (0.05 * math.sin(f * 0.13), -2.0, 0.22 + 0.01 * math.sin(f * 0.4))
-    cam.rotation_euler = (math.radians(62 + 6 * math.sin(f * 0.05)), math.radians(4 * math.sin(f * 0.07)), math.radians(185))
+    cam.rotation_euler = (math.radians(112 + 4 * math.sin(f * 0.05) + 6 * k), math.radians(3 * math.sin(f * 0.07)), math.radians(180))
     cam.keyframe_insert('location', frame=f); cam.keyframe_insert('rotation_euler', frame=f)
-    walk = min(1, k * 1.6)
-    her_at(f, (0.3 - 0.4 * walk, -0.2 - 2.4 * walk, 0), math.radians(180))
-    sw = math.sin(f * 0.35) * (1 - walk) * 0.5
-    for s, sfx in ((1, '_L'), (-1, '_R')):
-        pose(f, 'thigh' + sfx, sw * s, 0, 0)
+    walk = min(1, k * 1.5)
+    her_at(f, (0.1, -8.0 + 4.3 * walk, 0), 0.0)  # facing you
+    sw = math.sin(f * 0.3) * (1 - walk) * 0.5
+    for s_, sfx in ((1, '_L'), (-1, '_R')):
+        pose(f, 'thigh' + sfx, sw * s_, 0, 0)
         pose(f, 'shin' + sfx, -abs(sw) * 0.8, 0, 0)
         pose(f, 'foot' + sfx, 0, 0, math.pi)  # her feet point backwards
-    lean = max(0, (k - 0.55) / 0.45)
-    pose(f, 'spine', 0.55 * lean, 0, 0); pose(f, 'chest', 0.35 * lean, 0, 0)
-    pose(f, 'neck', 0.4 + 0.3 * lean, 0, 0.5 * math.sin(f * 0.6) * 0.15)
-    pose(f, 'head', 0.3, 0, 0.6 * lean)
-    pose(f, 'upperarm_R', -0.9 * lean, 0, 0); pose(f, 'forearm_R', -0.4 * lean, 0, 0)
+    lean = max(0, (k - 0.6) / 0.4)
+    pose(f, 'spine', 0.45 * lean, 0, 0); pose(f, 'chest', 0.3 * lean, 0, 0)
+    pose(f, 'neck', 0.3 + 0.35 * lean, 0, 0.08 * math.sin(f * 0.6))
+    pose(f, 'head', 0.25, 0, 0.55 * lean)
+    pose(f, 'upperarm_R', 0.9 * lean, 0, 0); pose(f, 'forearm_R', 0.3 * lean, 0, 0)
     pose(f, 'fingers_R', 0.5 + 0.3 * math.sin(f * 0.9), 0, 0)
-    focus.location = (0.1, -2.5 - 2.0 * walk, 1.6 - 0.6 * lean); focus.keyframe_insert('location', frame=f)
+    focus.location = (0.1, -8.0 + 4.6 * walk, 1.8 - 0.4 * lean); focus.keyframe_insert('location', frame=f)
 legs.hide_render = True; legs.keyframe_insert('hide_render', frame=1)
 legs.hide_render = False; legs.keyframe_insert('hide_render', frame=E2[0])
 
-# E2 + E3: dragged on your back towards the house; you look down your body at her
-DRAG_V = 1.25  # m/s, she is in no hurry
-y0 = -2.0
+# E2 + E3: dragged on your back to the house; you look down your body at her, the house ahead
+y0, y1 = -2.0, HOUSE_Y + 1.0  # ends inside the dark doorway
 for f in range(E2[0], F_END + 1, 2):
     tt = (f - E2[0]) / FPS
-    y = y0 + DRAG_V * tt
-    if f >= E3[0]:  # up the steps: jolts
-        y = min(y, HOUSE_Y + 1.6)
+    k = (f - E2[0]) / (F_END - E2[0])
+    y = y0 + (y1 - y0) * k
     stepz = 0.0
     sy = HOUSE_Y - 4.4
-    if y > sy:
-        stepz = min(0.9, math.floor((y - sy) / 0.4 + 1) * 0.2) + 0.05 * math.sin(f * 2.1)
-    bob = 0.03 * abs(math.sin(f * 0.42))
-    cam.location = (0.03 * math.sin(f * 0.21), y, 0.24 + stepz + bob)
-    cam.rotation_euler = (math.radians(78 + 3 * math.sin(f * 0.42)), math.radians(5 * math.sin(f * 0.19)), 0)
+    if y > sy:  # up the porch steps: thump, thump
+        stepz = min(0.9, math.floor((y - sy) / 0.4 + 1) * 0.2) + 0.04 * math.sin(f * 2.1)
+    bob = 0.025 * abs(math.sin(f * 0.42))
+    near = min(1, max(0, (y - (sy - 1.6)) / 1.6))  # at the steps: lifted, looking up at the door
+    cam.location = (0.03 * math.sin(f * 0.21), y, 0.26 + stepz + bob + 0.45 * near)
+    cam.rotation_euler = (math.radians(88 + 7 * near + 2.5 * math.sin(f * 0.42)), math.radians(4 * math.sin(f * 0.19)), 0)
     cam.keyframe_insert('location', frame=f); cam.keyframe_insert('rotation_euler', frame=f)
-    legs.location = (0, y + 0.45, 0.12 + stepz); legs.rotation_euler = (math.radians(12), 0, 0)
+    legs.location = (0, y + 0.95, 0.08 + stepz); legs.rotation_euler = (math.radians(22), 0, 0)  # ankles lifted to her hand
     legs.keyframe_insert('location', frame=f); legs.keyframe_insert('rotation_euler', frame=f)
     # she walks ahead, facing the house, one arm back gripping your ankle
-    ph = tt * 4.2
-    her_at(f, (0.18, y + 2.35, stepz), 0.0)
-    for s, sfx in ((1, '_L'), (-1, '_R')):
-        a = math.sin(ph + (0 if s > 0 else math.pi))
+    ph = tt * 4.6
+    her_at(f, (0.12, y + 2.45, stepz), 0.0)
+    for s_, sfx in ((1, '_L'), (-1, '_R')):
+        a = math.sin(ph + (0 if s_ > 0 else math.pi))
         pose(f, 'thigh' + sfx, 0.45 * a, 0, 0)
         pose(f, 'shin' + sfx, -0.6 * max(0, -a), 0, 0)
         pose(f, 'foot' + sfx, 0, 0, math.pi)
     pose(f, 'spine', 0.18, 0, 0.05 * math.sin(ph)); pose(f, 'chest', 0.08, 0, 0)
     pose(f, 'neck', 0.25, 0, 0); pose(f, 'head', 0.1, 0.25 * math.sin(tt * 0.9), 0.35)
-    pose(f, 'upperarm_R', 0.75, 0, 0.25); pose(f, 'forearm_R', 0.15, 0, 0); pose(f, 'fingers_R', 0.9, 0, 0)
+    pose(f, 'upperarm_R', -0.75, 0, -0.2); pose(f, 'forearm_R', -0.15, 0, 0); pose(f, 'fingers_R', 0.9, 0, 0)
     pose(f, 'upperarm_L', -0.1 + 0.15 * math.sin(ph), 0, 0); pose(f, 'forearm_L', -0.2, 0, 0)
-    focus.location = (0.2, y + 2.4, 1.2); focus.keyframe_insert('location', frame=f)
-# straight into the dark doorway at the end
-cam.location = (0, HOUSE_Y + 0.6, 1.3); cam.rotation_euler = (math.radians(85), 0, 0)
-cam.keyframe_insert('location', frame=F_END); cam.keyframe_insert('rotation_euler', frame=F_END)
+    focus.location = (0.2, y + 2.4, 1.1); focus.keyframe_insert('location', frame=f)
 
 # ---------------------------------------------------------------- snow falling (no simulation: a pure function of time)
 fl_bm = bmesh.new(); bmesh.ops.create_icosphere(fl_bm, subdivisions=1, radius=0.018)

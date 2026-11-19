@@ -38,8 +38,8 @@ Everyone picks a survivor in the lobby (8 characters), then anyone presses **Beg
 ## The intro
 
 Every game starts with a cut scene: you and your friends are driving up a snowy mountain road at night. The street
-lights flicker and die one by one. Then a truck's lights come out of the dark, in your lane. When you wake up, you are
-lying on the floor of the house. The outside shots are a movie rendered in Blender; the inside of the car is played
+lights flicker and die one by one. Then a truck's lights come out of the dark, in your lane. Then she comes out of the dark and drags you by the ankle through the snow, up the porch steps and into the
+house. When you wake up, you are lying on its floor. The outside shots are a movie rendered in Blender; the inside of the car is played
 live, so **everyone's chosen character is sitting in the car** (the first player drives). In co-op the friends chat about their holiday plan on the way (spoken, with subtitles, using your player names) until the lights start dying. Hold **Space** to skip it.
 
 ## Difficulty
@@ -129,6 +129,8 @@ To rebuild the Blender models:
   - "Adventurer", "Hoodie Character", "Woman", "Man", "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the car, truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
+- Horn in the intro: "Car Horn.wav" by **15HPanska_Ruttner_Jan** (Wikimedia Commons), CC0
+- After the crash: the Chudail dragging you to the house is rendered in Blender from the game's own Chudail model (`blender/build_drag.py`)
 - Jumpscare scream: "Demonic Woman Scream" by **nick121087** (Freesound, via Wikimedia Commons), CC0
 - The Chudail and the Crawler: modeled with a script in Blender for this game
 - Fonts: Creepster, Eczar, Kalam, IM Fell English SC, Courier Prime, Homemade Apple, Rubik Wet Paint, Nosifer (Google Fonts, OFL)

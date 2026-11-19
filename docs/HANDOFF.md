@@ -323,6 +323,13 @@ line marked `dark` starts the lamps dying; after the last line `setTruck()` star
 `update(..., { driver, steer })` puts both hands on the wheel. Lamp hum/crackle: `snd.lamp(level)` per frame,
 `snd.flicker()/pop()` on the video's timeline. Solo players get no dialogue. Server `INTRO_S` = 65.
 
+After the crash (intro v3): `blender/build_drag.py` renders `public/video/drag.mp4` (300 frames, 12.5 s: E1 she
+walks out of the wreck's glow and leans over you; E2 POV dragged by the ankle to the house at HOUSE_Y; E3 up the
+porch steps into the black doorway). It imports `public/models/hollow.glb` and builds her head, hair strands and gown
+in Blender. Fog is a volume BOX there (a world volume blacked the whole scene out). `intro.js` `startDrag()` plays it
+after the white flash (`INTRO.dragAfter`), with cues (crunch, scrape, thud, creak, slam); Space/Esc -> `skipAll()`.
+Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if it fails to load. Server INTRO_S 80.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).
