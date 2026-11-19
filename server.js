@@ -636,7 +636,7 @@ function namedTunnel() {
   } catch {}
   return null;
 }
-function startTunnel() {
+function startTunnel(attempt = 1) {
   const named = namedTunnel();
   console.log(named ? `\n  Opening https://${named.hostname} (Cloudflare tunnel "${named.name}")...` : '\n  Opening a worldwide link (Cloudflare tunnel)...');
   let proc;
@@ -644,12 +644,12 @@ function startTunnel() {
   const args = named
     ? ['tunnel', '--no-autoupdate', 'run', '--url', `http://localhost:${PORT}`, named.name]
     : ['tunnel', '--no-autoupdate', '--url', `http://localhost:${PORT}`];
-  try { proc = spawn(bin, args); }
+  try { proc = spawn(bin, args); game.tunnelProc = proc; }
   catch { return tunnelMissing(); }
   proc.on('error', tunnelMissing);
   const scan = (buf) => {
     const txt = String(buf);
-    const m = named ? (/Registered tunnel connection/.test(txt) ? [`https://${named.hostname}`] : null) : txt.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+    const m = named ? (/Registered tunnel connection/.test(txt) ? [`https://${named.hostname}`] : null) : txt.match(/https:\/\/(?!api\.)[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com/); // not api.trycloudflare.com from an error
     if (named && /error|failed/i.test(txt) && !game.publicUrl) console.log('  [tunnel] ' + txt.trim().split('\n').pop());
     if (m && !game.publicUrl) {
       game.publicUrl = m[0];
@@ -658,9 +658,16 @@ function startTunnel() {
     }
   };
   proc.stdout.on('data', scan); proc.stderr.on('data', scan);
-  proc.on('exit', () => { game.publicUrl = null; });
-  process.on('exit', () => proc.kill());
-  process.on('SIGINT', () => { proc.kill(); process.exit(0); });
+  proc.on('exit', () => {
+    const had = game.publicUrl; game.publicUrl = null;
+    if (had || attempt >= 4) { if (!had) console.log('\n  Could not open a worldwide link. This network may be blocking Cloudflare; try another Wi-Fi or a phone hotspot.\n'); return; }
+    console.log(`  [tunnel] Cloudflare did not answer, trying again (${attempt + 1}/4)...`);
+    setTimeout(() => startTunnel(attempt + 1), 4000 * attempt);
+  });
+  if (attempt === 1) {
+    process.on('exit', () => game.tunnelProc?.kill());
+    process.on('SIGINT', () => { game.tunnelProc?.kill(); process.exit(0); });
+  }
 }
 function tunnelMissing() {
   console.log('\n  cloudflared is not installed. Install it once, then run  npm run online  again:');
