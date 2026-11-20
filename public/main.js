@@ -11,6 +11,7 @@ import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ens
 import * as TX from './textures.js';
 import { SETTINGS, is, makeHeld, initSettings, openSettings, closeSettings, settingsOpen } from './settings.js';
 import { newRun, track as trackAch, runSummary } from './achievements.js';
+import { createVoice } from './voice.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
 import { buildStatues } from './statues.js';
 import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -141,6 +142,7 @@ function handle(m) {
       break;
     case 'start': startGame(m); break;
     case 'snap': applySnap(m); break;
+    case 'rtc': S.voice?.onSignal(m.from, m.data); break;
     case 'ev': onEvent(m); if (S.run) trackAch(S.run, m).forEach(achToast); break;
     case 'end': onEnd(m); break;
   }
@@ -230,6 +232,12 @@ function applySettings(k) {
   window.dispatchEvent(new CustomEvent('cb-settings', { detail: k }));
 }
 initSettings(applySettings);
+window.addEventListener('cb-settings', (e) => {
+  if (e.detail === 'voice' && S.phase === 'playing' && !S.spectator) {
+    if (!SETTINGS.voice) { S.voice?.stop(); S.voice = null; }
+    else if (!S.voice) { S.voice = createVoice({ audio, send, settings: SETTINGS, myId: S.myId }); S.voice.start().then(() => { for (const id of S.players.keys()) S.voice?.call(id); }); }
+  }
+});
 $('lobbySettings').onclick = (e) => { e.stopPropagation(); openSettings(); };
 $('pauseSettings').onclick = (e) => { e.stopPropagation(); openSettings(); };
 
@@ -387,6 +395,12 @@ function buildGame(m) {
   try { S.statues = buildStatues({ map, world: S.world, seed: m.seed }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
   buildBlueprint(map, m.bp);
   S.ghostType = GHOST_TYPES[m.ghostType] ? m.ghostType : 'chudail';
+  S.voice?.stop(); S.voice = null;
+  if (!S.spectator && SETTINGS.voice) {
+    S.voice = createVoice({ audio, send, settings: SETTINGS, myId: S.myId });
+    audio.init();
+    S.voice.start().then(() => { for (const id of S.players.keys()) S.voice?.call(id); });
+  }
   S.run = S.spectator ? null : newRun({ myId: S.myId, solo: m.players.length === 1, difficulty: m.difficulty, ghostType: S.ghostType });
 
   S.hemi = new THREE.HemisphereLight(0x2a3448, 0x140c08, 0.9); scene.add(S.hemi);
@@ -822,8 +836,9 @@ function onEvent(m) {
       else if (h) audio.locker(h.x, h.z, false);
       break;
     }
-    case 'joined': if (!S.scene) { (S.pendingJoins = S.pendingJoins || []).push(m); break; } addPlayer({ id: m.id, name: m.name, color: m.color, char: m.char, x: S.map.spawns[0][0], z: S.map.spawns[0][1] }); message(`${m.name} entered the asylum`); break;
+    case 'joined': S.voice?.call(m.id); if (!S.scene) { (S.pendingJoins = S.pendingJoins || []).push(m); break; } addPlayer({ id: m.id, name: m.name, color: m.color, char: m.char, x: S.map.spawns[0][0], z: S.map.spawns[0][1] }); message(`${m.name} entered the asylum`); break;
     case 'left': {
+      S.voice?.drop(m.id);
       const r = S.players.get(m.id);
       if (r) { S.scene.remove(r.avatar); S.players.delete(m.id); }
       if (S.spectating === m.id) nextSpectate();
@@ -861,6 +876,7 @@ function playEnding() {
 
 function onEnd(m) {
   closeBlueprint();
+  setTimeout(() => { S.voice?.stop(); S.voice = null; }, 15000); // keep talking over the end screen a little
   if (S.intro && S.intro.outro) { S.pendingEnd = m; return; } // let the drive away finish first
   if (S.intro) { S.intro.abort(); S.intro = null; $('hud').classList.add('show'); }
   S.phase = 'ended';
@@ -1871,8 +1887,10 @@ function updateHUD(dt) {
   hudT -= dt;
   if (hudT > 0) return;
   hudT = 0.3;
-  const rows = S.spectator ? [] : [`<div style="color:${S.myColor}" class="${me.alive ? '' : 'dead'}">${esc(S.name)} ${me.escaped ? '✓' : me.alive ? '' : '✕'}</div>`];
-  for (const r of S.players.values()) rows.push(`<div style="color:${r.color}" class="${r.alive ? '' : 'dead'}">${esc(r.name)} ${r.escaped ? '✓' : r.alive ? '' : '✕'}</div>`);
+  const talk = (id) => (S.voice && S.voice.speaking(id) ? ' 🔊' : '');
+  const rows = S.spectator ? [] : [`<div style="color:${S.myColor}" class="${me.alive ? '' : 'dead'}">${esc(S.name)} ${me.escaped ? '✓' : me.alive ? '' : '✕'}${talk(S.myId)}</div>`];
+  for (const r of S.players.values()) rows.push(`<div style="color:${r.color}" class="${r.alive ? '' : 'dead'}">${esc(r.name)} ${r.escaped ? '✓' : r.alive ? '' : '✕'}${talk(r.id)}</div>`);
+  if (S.voice && S.voice.status()) rows.push(`<div style="color:#7d7464;font-size:11px;font-weight:400">${esc(S.voice.status())}</div>`);
   const tk = rows.join('');
   if (tk !== teamKey) { teamKey = tk; $('team').innerHTML = tk; }
 }
@@ -1966,6 +1984,7 @@ function frame(now) {
   updateCrawler(dt, t);
   S.statues?.update(dt, camera, S.camL, audio);
   updatePings();
+  S.voice?.update(dt, { me: S.me, players: S.players, held, camL: S.camL });
   updateLights(dt, t);
   S.world.update(dt, t);
   updateScares(dt, t);

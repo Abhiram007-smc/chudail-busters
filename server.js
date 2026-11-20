@@ -331,6 +331,7 @@ function updateMonster(dt) {
   // --- hearing (same floor)
   let noise = null;
   for (const p of targets) {
+    if (p.voiceT && now() - p.voiceT < 0.8 && !p.hid && p.L === m.L && Math.hypot(p.x - m.x, p.z - m.z) < 11 * d.hearing) { noise = { x: p.x, z: p.z, L: p.L }; break; } // loud voices carry
     if (!p.mv || p.hid || p.L !== m.L) continue;
     const dist = Math.hypot(p.x - m.x, p.z - m.z);
     const r = (p.sp ? 17 : (p.cr || p.sn) ? 0 : 6) * d.hearing;
@@ -653,6 +654,11 @@ wss.on('connection', (ws) => {
       if (m && !['dormant', 'bound'].includes(m.state) && m.L === me.L && Math.hypot(m.x - me.x, m.z - me.z) < 18) { m.stunT = 6; m.state = 'stunned'; froze = true; }
       if (c && ['ceiling', 'drop', 'crawl'].includes(c.state) && c.L === me.L && Math.hypot(c.x - me.x, c.z - me.z) < 18) { c.state = 'retreat'; c.t = now() + 1.2; scared = true; }
       broadcast({ t: 'ev', e: 'bell', by: me.id, x: me.x, z: me.z, L: me.L, bells: me.bells, froze, scared });
+    } else if (msg.t === 'rtc') { // voice chat: pass the connection messages between two players
+      const to = game.players.get(msg.to);
+      if (to && msg.data && JSON.stringify(msg.data).length < 20000) send(to, { t: 'rtc', from: me.id, data: msg.data });
+    } else if (msg.t === 'noise') { // someone is talking loudly into their microphone: she can hear that
+      if (me.alive && !me.escaped) me.voiceT = now();
     } else if (msg.t === 'ping') { // mark a spot for everyone (at most one every 1.2 s)
       if (!me.alive || me.escaped || now() < (me.pingT || 0)) return;
       me.pingT = now() + 1.2;
