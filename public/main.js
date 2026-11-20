@@ -10,6 +10,7 @@ import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
 import * as TX from './textures.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
+import { buildStatues } from './statues.js';
 import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = (id) => document.getElementById(id);
@@ -372,6 +373,7 @@ function buildGame(m) {
   scene.fog = new THREE.FogExp2(0x000000, 0.072);
   scene.add(camera);
   S.world = buildWorld(scene, map);
+  try { S.statues = buildStatues({ map, world: S.world, seed: m.seed }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
 
   S.hemi = new THREE.HemisphereLight(0x2a3448, 0x140c08, 0.9); scene.add(S.hemi);
   playerGlow = new THREE.PointLight(0x8a96b0, 1.2, 6, 1.6); camera.add(playerGlow);
@@ -1706,6 +1708,7 @@ function frame(now) {
   updateLevels();
   updateMonster(dt, t);
   updateCrawler(dt, t);
+  S.statues?.update(dt, camera, S.camL, audio);
   updateLights(dt, t);
   S.world.update(dt, t);
   updateScares(dt, t);

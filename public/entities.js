@@ -27,12 +27,13 @@ export function ensureChar(key) {
   return loading[key];
 }
 export function charLoaded(key) { return !!ANIMATED[key]; }
+export function getModel(name) { return MODELS[name] || null; }
 let modelsPromise = null;
 export function loadModels() {
   if (modelsPromise) return modelsPromise;
   const loader = new GLTFLoader();
   const get = (name) => new Promise((res) => loader.load(`/models/${name}.glb`, (g) => { MODELS[name] = g.scene; res(); }, undefined, (e) => { console.warn('model failed', name, e); res(); }));
-  modelsPromise = Promise.all([get('hollow'), get('survivor')]);
+  modelsPromise = Promise.all([get('hollow'), get('survivor'), get('ghost_face')]);
   return modelsPromise;
 }
 
