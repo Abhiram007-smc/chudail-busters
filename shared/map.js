@@ -289,7 +289,7 @@ function tryGenerate(seed) {
     return out;
   };
   const batteries = scatter(18, 'b', 5, 3);
-  const bells = scatter(11, 'w', 4, 6);
+  const bells = scatter(6, 'w', 5, 9); // rarer: a bell freezes her, it should feel precious
   const souls = scatter(9, 'r', 4, 7, (L, i, j) => grid[L][j * W + i] === 1);
 
   // ---------- doorways, props, bulbs, decals per floor ----------
@@ -325,10 +325,10 @@ function tryGenerate(seed) {
           if (oi >= r.x && oi < r.x + r.w && oj >= r.y && oj < r.y + r.h) continue;
           if (!solid(oi, oj)) nearOpen = true; else walls.push([dx, dz]);
         }
-        if (nearOpen || !walls.length || count >= 7 || rng() > 0.55) continue;
+        if (nearOpen || !walls.length || count >= 10 || rng() > 0.75) continue; // fuller rooms
         const [wx, wz] = pick(walls);
         const hideType = ['ward', 'office', 'nursery', 'records'].includes(r.type) && rng() < 0.5 ? 'wardrobe' : 'locker';
-        const type = (count === 0 && r.type !== 'foyer' && rng() < 0.9) || ((count === 2 || count === 4) && rng() < 0.45) ? hideType : pick(list);
+        const type = (count === 0 && r.type !== 'foyer' && rng() < 0.9) || ((count === 2 || count === 4 || count === 6) && rng() < 0.6) ? hideType : pick(list);
         const [pw, pd] = PROP_SIZE[type];
         const off = CELL / 2 - pd / 2 - 0.08;
         const rot = wz === -1 ? 0 : wz === 1 ? Math.PI : wx === -1 ? Math.PI / 2 : -Math.PI / 2;
@@ -340,7 +340,7 @@ function tryGenerate(seed) {
     // corridor lockers
     const corr = floorCells[L].filter(([i, j]) => g[j * W + i] === 2);
     const placed = [];
-    for (let t = 0; t < 900 && placed.length < 9; t++) {
+    for (let t = 0; t < 1200 && placed.length < 13; t++) {
       const [i, j] = pick(corr); const k = j * W + i;
       const ns = isF(i, j - 1) && isF(i, j + 1) && solid(i - 1, j) && solid(i + 1, j);
       const ew = isF(i - 1, j) && isF(i + 1, j) && solid(i, j - 1) && solid(i, j + 1);

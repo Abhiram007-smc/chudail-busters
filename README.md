@@ -51,6 +51,11 @@ co-op the friends chat about their holiday plan on the way (silent, subtitles on
 Get out through the front door and you drive away in the same car, wrecked from the crash, with everyone who made it
 out; she watches you go from the doorway.
 
+## Things that watch you
+
+Screaming plaster faces are set into the corridor walls and stone statues of her stand in the rooms and halls.
+They never move while you look at them. Look away.
+
 ## Finding your way
 
 Every room has its name above the door, and enamel signs at the corridor junctions point to the **STAIRS**, the
@@ -146,6 +151,7 @@ To rebuild the Blender models:
 - Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
 - Intro and ending car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
 - Wood footsteps: "Different steps on wood, stone, leaves, gravel and mud" by **TinyWorlds** ([OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)), CC0
+- Ghost faces in the walls: made in Blender from "Marble Bust 01" by [Poly Haven](https://polyhaven.com/a/marble_bust_01) (CC0)
 - Tile footsteps: "Footsteps on different surfaces" (tile) by **congusbongus** ([OpenGameArt](https://opengameart.org/content/footsteps-on-different-surfaces)), from recordings by **swuing** and **ceberation** (Freesound), CC-BY 3.0
 - Horn in the intro: "Car Horn.wav" by **15HPanska_Ruttner_Jan** (Wikimedia Commons), CC0
 - After the crash: the drag into the house and the ending are live three.js scenes (`public/drag.js`) with the game's own characters and Chudail

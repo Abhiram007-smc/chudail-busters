@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
-import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray } from './entities.js';
+import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray, getModel } from './entities.js';
 import * as TX from './textures.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
 import { buildStatues } from './statues.js';
@@ -453,7 +453,7 @@ function buildGame(m) {
   S.composer.addPass(new OutputPass());
   S.post = new ShaderPass(HorrorShader); S.composer.addPass(S.post);
 
-  S.fear = 0; S.red = 0; S.black = 1; S.shake = 0; S.timers = []; S.spectating = null; S.jumpscare = false; S.ghostState = null;
+  S.fear = 0; S.red = 0; S.black = 1; S.shake = 0; S.timers = []; S.anims = []; S.spectating = null; S.jumpscare = false; S.ghostState = null;
   S.nextScare = performance.now() / 1000 + rnd(30, 45);
   S.flickUntil = 0; S.lightsOutUntil = 0; S.torchCtl = null;
   S.clues = new Set(); S.reading = null; renderClues();
@@ -885,12 +885,12 @@ function showBriefing(target = $('brief')) {
 // waking up after the intro: you say it out loud (well, in subtitles), then the objectives pop up
 function wakeUpSequence() {
   const who = esc(S.name || 'You');
-  S.timers.push(setTimeout(() => {
+  later(2.6, () => {
     $('wakesub').innerHTML = `<b>${who}:</b> We're stuck in this house... we have to find a way out.`;
     $('wakesub').style.opacity = 1;
-  }, 2600));
-  S.timers.push(setTimeout(() => ($('wakesub').style.opacity = 0), 6600));
-  S.timers.push(setTimeout(() => showObjectivesPopup(), 7200));
+  });
+  later(6.6, () => ($('wakesub').style.opacity = 0));
+  later(7.2, () => showObjectivesPopup());
 }
 function showObjectivesPopup() {
   const pop = $('objpop');
@@ -967,20 +967,70 @@ function findSpotAhead(minD, maxD) {
 
 function showGhost(x, z, until, kind) {
   const g = S.ghost;
+  g.userData.setCrawl?.(kind === 'ceiling' ? 1 : 0, 1, WALL_H, true);
   g.position.set(x, heightAt(S.map, S.me.L, x, z), z);
   g.rotation.y = Math.atan2(-(camera.position.x - x), -(camera.position.z - z));
   g.visible = true;
   S.ghostState = { until, seen: false, kind, lookT: 0 };
 }
-function hideGhost() { S.ghost.visible = false; S.ghostState = null; }
+function hideGhost() { S.ghost.visible = false; S.ghost.userData.setCrawl?.(0, 1, WALL_H, true); S.ghostState = null; }
+
+// a face in the wall next to you: it lunges out at you, screaming, then sinks back
+function wallFace(t) {
+  const model = getModel('ghost_face'); if (!model || !S.me) return false;
+  const ci = Math.floor(S.me.x / CELL), cj = Math.floor(S.me.z / CELL), f = camForward();
+  const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => isWall(S.map, S.me.L, ci + a, cj + b))
+    .map(([a, b]) => ({ a, b, side: Math.abs(a * f.x + b * f.z) })).sort((p, q) => p.side - q.side); // a wall beside you, not ahead
+  if (!opts.length) return false;
+  const { a, b } = opts[0];
+  const wallX = (ci + 0.5) * CELL + a * CELL / 2, wallZ = (cj + 0.5) * CELL + b * CELL / 2;
+  // about a metre ahead of you along that wall, so it bursts out at the edge of your view, not behind you
+  let px = a ? wallX : S.me.x + f.x * 1.1, pz = b ? wallZ : S.me.z + f.z * 1.1;
+  if (!isWall(S.map, S.me.L, Math.floor((px + a * 0.2) / CELL), Math.floor((pz + b * 0.2) / CELL))) { px = a ? wallX : S.me.x; pz = b ? wallZ : S.me.z; }
+  const base = Math.atan2(-a, -b);
+  const g = new THREE.Group(); g.position.set(px, S.me.L * FLOOR_H + 1.25, pz); g.rotation.y = base;
+  const face = model.clone(true); face.scale.setScalar(1.35); face.position.set(0.1, 0, 0); g.add(face);
+  S.scene.add(g);
+  const scene = S.scene;
+  // driven by the game loop (S.anims), so it can never get stuck in the wall
+  S.anims.push((t2) => {
+    const k = t2 - t;
+    const out = k < 0.18 ? Math.max(0, k / 0.18) : k < 0.9 ? 1 : Math.max(0, 1 - (k - 0.9) / 0.6);
+    g.position.x = px - a * 0.55 * out; g.position.z = pz - b * 0.55 * out;
+    let turn = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z) - base;
+    while (turn > Math.PI) turn -= Math.PI * 2; while (turn < -Math.PI) turn += Math.PI * 2;
+    g.rotation.y = base + turn * Math.min(1, out * 1.2); // it turns to scream at you
+    g.rotation.z = Math.sin(k * 40) * 0.04 * out;
+    if (k >= 1.6) { scene.remove(g); return false; }
+    return true;
+  });
+  audio.stinger(0.9); audio.screech(px, pz, 0.9); S.shake = 1.1; S.red = 0.7; fxFlash('#fff', 0.5, 120); fxGlitch(120);
+  return true;
+}
+
+// something slams bloody hands against your eyes (the glass of the screen)
+function handprints() {
+  let cv = $('handcv');
+  if (!cv) { cv = document.createElement('canvas'); cv.id = 'handcv'; Object.assign(cv.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', pointerEvents: 'none', zIndex: 6, transition: 'opacity 2.5s' }); document.body.appendChild(cv); }
+  cv.width = innerWidth; cv.height = innerHeight; const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
+  cv.style.transition = 'none'; cv.style.opacity = 1;
+  const n = 3 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < n; k++) later(k * rnd(0.18, 0.32), () => {
+    if (!S.me?.alive) return;
+    TX.handprint(g, rnd(0.15, 0.85) * cv.width, rnd(0.2, 0.8) * cv.height, rnd(3.6, 5.4) * Math.min(cv.width, cv.height) / 900, rnd(-0.6, 0.6));
+    audio.bang(S.me.x, S.me.z, 0.55); S.shake = 0.5; S.red = Math.max(S.red, 0.4);
+  });
+  later(n * 0.3 + 1.2, () => { cv.style.transition = 'opacity 2.5s'; cv.style.opacity = 0; });
+}
 
 function runScare(t, forced) {
-  const options = ['apparition', 'apparition', 'footsteps', 'whisper', 'blackout', 'blackout', 'bulb', 'slam', 'behind', 'subliminal'];
-  if (S.progress >= 1) options.push('approach', 'behind');
+  const options = ['apparition', 'apparition', 'footsteps', 'whisper', 'blackout', 'blackout', 'bulb', 'slam', 'behind', 'subliminal',
+    'wallface', 'wallface', 'statue', 'statue', 'handprints', 'scream', 'ceiling'];
+  if (S.progress >= 1) options.push('approach', 'behind', 'ceiling', 'wallface');
   if (S.progress >= 2) options.push('faceflash', 'approach', 'blackout');
   let type = forced || options[Math.floor(Math.random() * options.length)];
   const monD = Math.hypot(S.mon.x - S.me.x, S.mon.z - S.me.z);
-  if ((type === 'apparition' || type === 'approach' || type === 'behind') && monD < 18) type = 'whisper';
+  if ((type === 'apparition' || type === 'approach' || type === 'behind' || type === 'ceiling') && monD < 18) type = 'whisper';
   switch (type) {
     case 'apparition': {
       const spot = findSpotAhead(7, 15);
@@ -1042,6 +1092,34 @@ function runScare(t, forced) {
       audio.whisper(0, 0.55, 1.8); audio.breath(0.3); later(1.2, () => audio.breath(0.35));
       break;
     }
+    case 'wallface': { // a screaming face pushes out of the wall right beside you, then sinks back in
+      if (!wallFace(t)) audio.whisper(rnd(-1, 1), 0.4, 1.8);
+      break;
+    }
+    case 'statue': { // the lights stutter; when they come back, a statue is closer
+      S.flickUntil = t + 0.7; audio.buzz(0.45, 0.1);
+      later(0.32, () => { if (!S.me?.alive) return; if (S.statues?.creep(camera, S.camL, audio)) { S.shake = 0.35; later(0.4, () => audio.whisper(rnd(-0.5, 0.5), 0.3, 1.4)); } else audio.whisper(rnd(-1, 1), 0.3, 1.6); });
+      break;
+    }
+    case 'handprints': handprints(); break;
+    case 'scream': { // a woman screams somewhere off to one side
+      const a = Math.random() * Math.PI * 2, d = rnd(9, 15);
+      audio.distantScream(S.me.x + Math.cos(a) * d, S.me.z + Math.sin(a) * d); S.red = 0.3; S.shake = 0.25;
+      break;
+    }
+    case 'ceiling': { // she skitters across the ceiling just ahead of you
+      const f = camForward(), r = { x: -f.z, z: f.x }, ahead = 4.2;
+      const cx = S.me.x + f.x * ahead, cz = S.me.z + f.z * ahead;
+      const a = { x: cx - r.x * 2.6, z: cz - r.z * 2.6 }, b = { x: cx + r.x * 2.6, z: cz + r.z * 2.6 };
+      const cell = (p) => isWall(S.map, S.me.L, Math.floor(p.x / CELL), Math.floor(p.z / CELL));
+      if (cell({ x: cx, z: cz }) || !lineOfSight(S.map, S.me.L, S.me.x, S.me.z, cx, cz)) { audio.skitter(cx, cz, 0.6); break; }
+      const from = cell(a) ? { x: cx, z: cz } : a, to = cell(b) ? { x: cx, z: cz } : b;
+      showGhost(from.x, from.z, t + 1.3, 'ceiling');
+      Object.assign(S.ghostState, { from, to, t0: t });
+      [0, 0.25, 0.5, 0.75].forEach((s) => later(s, () => audio.skitter((from.x + to.x) / 2, (from.z + to.z) / 2, 0.8)));
+      S.flickUntil = t + 0.4; S.shake = 0.3;
+      break;
+    }
     case 'approach': { // lights die; each flicker of your torch she is closer
       const dists = [9, 6.5, 4, 2.2], spots = dists.map((d) => findSpotAhead(d - 0.6, d));
       if (spots.some((p) => !p) || !findSpotAhead(0.8, 1.0)) { runScare(t, 'blackout'); return; }
@@ -1070,6 +1148,7 @@ function runScare(t, forced) {
 
 function updateScares(dt, t) {
   for (let k = S.timers.length - 1; k >= 0; k--) if (t >= S.timers[k].at) { const fn = S.timers[k].fn; S.timers.splice(k, 1); fn(); }
+  S.anims = (S.anims || []).filter((fn) => fn(t)); // short scare animations (a face out of the wall...)
   if (!S.me.alive || S.me.escaped) return;
   if (t > (S.nextCall || 0)) {
     S.nextCall = t + 0.5;
@@ -1088,11 +1167,17 @@ function updateScares(dt, t) {
   }
   if (t > S.nextScare) {
     if (S.mon.state === 'chase' && S.mon.target === S.myId) S.nextScare = t + 8;
-    else { runScare(t); S.nextScare = t + rnd(22, 45) - S.progress * 2.5; }
+    else { runScare(t); S.nextScare = t + rnd(15, 32) - S.progress * 2; }
   }
   const gs = S.ghostState;
   if (gs) {
-    S.ghost.userData.update(dt, 0, 'stall', t);
+    if (gs.kind === 'ceiling') {
+      const k = Math.min(1, (t - gs.t0) / 1.2);
+      S.ghost.position.set(gs.from.x + (gs.to.x - gs.from.x) * k, heightAt(S.map, S.me.L, S.ghost.position.x, S.ghost.position.z), gs.from.z + (gs.to.z - gs.from.z) * k);
+      S.ghost.rotation.y = Math.atan2(-(gs.to.x - gs.from.x), -(gs.to.z - gs.from.z));
+      S.ghost.userData.setCrawl?.(1, 1, WALL_H, k === 0);
+      S.ghost.userData.update(dt, 4, 'chase', t);
+    } else S.ghost.userData.update(dt, 0, 'stall', t);
     const dx = S.ghost.position.x - camera.position.x, dz = S.ghost.position.z - camera.position.z, d = Math.hypot(dx, dz);
     const f = camForward(); const dot = (dx * f.x + dz * f.z) / (d || 1);
     if (gs.kind === 'far') {

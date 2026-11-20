@@ -402,6 +402,29 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
 - Intro safety cap is now 120 s and cuts to the crash (the drag scene still plays) instead of skipping it all;
   server `INTRO_S` = 95. Full real-speed run: video 5-21 s, car 21-71 s, drag 71-91 s, wake screen at 92 s.
 
+## 7g. Statues and ghost faces, more scares, fuller house, fewer bells (LOCAL ONLY until the owner says)
+
+- **Ghost faces in the walls** (`public/models/ghost_face.glb`, built by `blender/build_statues.py` from the CC0 Poly
+  Haven "Marble Bust 01": head only, jaw dragged open, hollow black eyes, black tears; features found from the nose
+  tip). `public/statues.js` puts 5 per floor half into corridor walls at head height.
+- **Stone Chudails**: her own model (`createMonster`) turned to stone (`makeStone(pose)`: grey material, black for
+  the mouth/tears/hair, no glow or embers), jaw open (`reveal` 1), pose `stare` or `chase`. 2 per floor in room
+  corners + 3 per floor in straight corridors, back to the wall. Client colliders (`world.colliders`, ref kept in
+  `s.col`).
+- **They watch you**: `statues.update(dt, camera, camL, audio)` each frame; anything not in the view frustum (or
+  behind a wall) turns towards the camera (faces within +-0.75 rad of the wall normal, corridor statues +-1.3, room
+  statues fully); when you look back at one that turned > 0.45 rad within 12 m, a stone grind plays. Per player.
+- **New jump scares** (`runScare` in main.js; every 15-32 s now, was 22-45): `wallface` (a ghost face lunges out of
+  the wall beside/ahead of you and turns to scream at you; animated through `S.anims` in `updateScares`, never via
+  requestAnimationFrame so it can't get stuck), `statue` (lights stutter, the nearest statue in sight steps up to
+  1.6 m closer: `statues.creep`), `handprints` (bloody hands slapped onto a screen overlay `#handcv` with bangs),
+  `scream` (`audio.distantScream` off to one side), `ceiling` (`showGhost(..., 'ceiling')`: she skitters across the
+  ceiling ahead; `setCrawl(1)` and a 1.2 s slide in the ghost updater).
+- **Map** (shared/map.js, both sides; checked: 30 seeds hash identically in Node and the browser): rooms take up to
+  10 props (was 7) with a 75% chance per wall cell (was 55%); hide types also at the 7th prop, 60% (was 45%); 13
+  corridor lockers per floor (was 9); bells 6 with 9-cell spacing (was 11 / 6). Averages over 20 maps: props 222 ->
+  317, hiding spots 115 -> 166, bells 11 -> 6 (before the difficulty multiplier).
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

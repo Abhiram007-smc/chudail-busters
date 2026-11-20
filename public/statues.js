@@ -25,9 +25,30 @@ export function buildStatues({ map, world, seed }) {
   const list = [];
 
   // ---- stone for her statues
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x77736c, roughness: 0.95, metalness: 0 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a4743, roughness: 1, metalness: 0 }); // dark enough not to blow out in the torch
   const voidMat = new THREE.MeshBasicMaterial({ color: 0x020202 });
   const hairStone = new THREE.MeshStandardMaterial({ color: 0x4a4740, roughness: 0.95, side: THREE.DoubleSide });
+
+  // her, in stone: one grey material, no glow, no smoke, no ember eyes; frozen in a pose with her jaw hanging open
+  function makeStone(pose) {
+    const g = createMonster();
+      // turn her to stone: one grey material, no glow, no smoke, no ember eyes
+      g.traverse((o) => {
+        if (o.isLight) o.intensity = 0;
+        if (o.isSprite) o.visible = false;
+        if (o.isMesh) {
+          const m = o.material, blackish = m && m.color && m.color.r + m.color.g + m.color.b < 0.08; // the open mouth, the tears
+          o.material = blackish ? voidMat : m && m.alphaTest ? hairStone : stoneMat; o.castShadow = true; o.receiveShadow = true;
+        }
+      });
+      if (g.userData.glow) { g.remove(g.userData.glow); g.userData.glow = null; }
+      g.userData.reveal = 1;
+      g.userData.setCrawl?.(0, 1, 3, true);
+      for (let k = 0; k < 30; k++) g.userData.update(1 / 30, pose === 'chase' ? 0.01 : 0, pose, 10 + k / 30);
+      for (const e of g.userData.eyes || []) e.visible = false;
+      if (g.userData.inst) { g.userData.inst.position.x = 0; g.userData.inst.position.z = 0; } // not caught mid-glitch
+    return g;
+  }
 
   // ---- stone Chudails in room corners, facing into the room
   for (const L of LEVELS) {
@@ -41,30 +62,41 @@ export function buildStatues({ map, world, seed }) {
       const wx = ci === r.x ? -1 : 1, wz = cj === r.y ? -1 : 1;
       const x = (ci + 0.5) * CELL + wx * (CELL / 2 - 0.75), z = (cj + 0.5) * CELL + wz * (CELL / 2 - 0.75);
       if (!clearOf(L, x, z, 1.4)) continue;
-      const g = createMonster();
-      // turn her to stone: one grey material, no glow, no smoke, no ember eyes
-      g.traverse((o) => {
-        if (o.isLight) o.intensity = 0;
-        if (o.isSprite) o.visible = false;
-        if (o.isMesh) {
-          const m = o.material, blackish = m && m.color && m.color.r + m.color.g + m.color.b < 0.08; // the open mouth, the tears
-          o.material = blackish ? voidMat : m && m.alphaTest ? hairStone : stoneMat; o.castShadow = true; o.receiveShadow = true;
-        }
-      });
-      if (g.userData.glow) { g.remove(g.userData.glow); g.userData.glow = null; }
-      const pose = rng() < 0.5 ? 'stare' : 'chase';
-      g.userData.reveal = 1;
-      g.userData.setCrawl?.(0, 1, 3, true);
-      for (let k = 0; k < 30; k++) g.userData.update(1 / 30, pose === 'chase' ? 0.01 : 0, pose, 10 + k / 30);
-      for (const e of g.userData.eyes || []) e.visible = false;
-      if (g.userData.inst) { g.userData.inst.position.x = 0; g.userData.inst.position.z = 0; } // not caught mid-glitch
+      const g = makeStone(rng() < 0.5 ? 'stare' : 'chase');
       g.position.set(x, 0, z);
       const toCentre = Math.atan2(-((r.x + r.w / 2) * CELL - x), -((r.y + r.h / 2) * CELL - z));
       g.rotation.y = toCentre;
       world.levelGroups[L].add(g);
       world.cull.push({ o: g, x, z });
-      world.colliders.push([x - 0.4, z - 0.4, x + 0.4, z + 0.4, L]);
-      list.push({ o: g, L, x, z, y: 1.9, base: toCentre, range: Math.PI, kind: 'statue', room: r.id, seen: toCentre });
+      const col = [x - 0.4, z - 0.4, x + 0.4, z + 0.4, L]; world.colliders.push(col);
+      list.push({ o: g, L, x, z, y: 1.9, base: toCentre, range: Math.PI, kind: 'statue', room: r.id, seen: toCentre, col });
+      placed++;
+    }
+  }
+
+  // ---- stone Chudails along the corridors, back to the wall, where the hall runs straight
+  for (const L of LEVELS) {
+    const cells = [];
+    for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) {
+      if (typeAt(L, i, j) !== 2 || nearDoor(L, i, j)) continue;
+      const ns = walk(L, i, j - 1) && walk(L, i, j + 1), ew = walk(L, i - 1, j) && walk(L, i + 1, j);
+      if (ns !== ew) cells.push([i, j, ns]);
+    }
+    let placed = 0;
+    for (let tries = 0; tries < 500 && placed < 3 && cells.length; tries++) {
+      const [i, j, ns] = cells[Math.floor(rng() * cells.length)];
+      if (list.some((o) => o.L === L && Math.hypot(o.x / CELL - (i + 0.5), o.z / CELL - (j + 0.5)) < 6)) continue;
+      const sides = (ns ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1]]).filter(([a, b]) => typeAt(L, i + a, j + b) === 0 && !writ.has(`${L},${i},${j},${a},${b}`));
+      if (!sides.length) continue;
+      const [wx, wz] = sides[Math.floor(rng() * sides.length)];
+      const x = (i + 0.5) * CELL + wx * (CELL / 2 - 0.5), z = (j + 0.5) * CELL + wz * (CELL / 2 - 0.5);
+      if (!clearOf(L, x, z, 1.3)) continue;
+      const g = makeStone(rng() < 0.6 ? 'stare' : 'chase');
+      const base = Math.atan2(wx, wz); // her front (-z) looks out across the hall, away from the wall
+      g.position.set(x, 0, z); g.rotation.y = base;
+      world.levelGroups[L].add(g); world.cull.push({ o: g, x, z });
+      const col = [x - 0.4, z - 0.4, x + 0.4, z + 0.4, L]; world.colliders.push(col);
+      list.push({ o: g, L, x, z, y: 1.9, base, range: 1.3, kind: 'statue', seen: base, col });
       placed++;
     }
   }
@@ -72,7 +104,7 @@ export function buildStatues({ map, world, seed }) {
   // ---- ghost faces in the corridor walls, at head height
   const face = getModel('ghost_face');
   if (face) {
-    face.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; if (o.material && !/void/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.multiplyScalar(1.15); o.material.emissive = new THREE.Color(0x0c0e12); } } });
+    face.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; if (o.material && !/void/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.multiplyScalar(0.62); o.material.emissive = new THREE.Color(0x07080b); } } });
     for (const L of LEVELS) {
       const cells = [];
       for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) if (typeAt(L, i, j) === 2 && !nearDoor(L, i, j)) cells.push([i, j]);
@@ -121,7 +153,28 @@ export function buildStatues({ map, world, seed }) {
       s.wasSeen = seen;
     }
   }
-  return { list, update, counts: { statues: list.filter((s) => s.kind === 'statue').length, faces: list.filter((s) => s.kind === 'face').length } };
+  // a jump scare: the lights stutter and, when they come back, the nearest statue you can see is closer
+  function creep(camera, camL, audio) {
+    const cx = camera.position.x, cz = camera.position.z;
+    let best = null, bd = 14;
+    for (const s of list) {
+      if (s.kind !== 'statue' || s.L !== camL) continue;
+      const d = Math.hypot(s.x - cx, s.z - cz);
+      if (d < 3.2 || d > bd || !lineOfSight(map, s.L, cx, cz, s.x, s.z)) continue;
+      best = s; bd = d;
+    }
+    if (!best) return false;
+    const step = Math.min(1.6, bd - 2.2), ux = (cx - best.x) / bd, uz = (cz - best.z) / bd;
+    const nx = best.x + ux * step, nz = best.z + uz * step;
+    const t = typeAt(best.L, Math.floor(nx / CELL), Math.floor(nz / CELL));
+    if (!(t === 1 || t === 2) || !clearOf(best.L, nx, nz, 0.9)) return false;
+    best.x = nx; best.z = nz; best.o.position.x = nx; best.o.position.z = nz;
+    best.col[0] = nx - 0.4; best.col[1] = nz - 0.4; best.col[2] = nx + 0.4; best.col[3] = nz + 0.4;
+    best.o.rotation.y = Math.atan2(-(cx - nx), -(cz - nz)); best.seen = best.o.rotation.y;
+    if (audio && audio.ctx) grind(audio, nx, nz, 1);
+    return true;
+  }
+  return { list, update, creep, counts: { statues: list.filter((s) => s.kind === 'statue').length, faces: list.filter((s) => s.kind === 'face').length } };
 }
 
 // stone dragged over stone, short and low, from where the thing is
