@@ -438,9 +438,19 @@ function tryGenerate(seed) {
   const fx = (foyer.cx + 0.5) * CELL, fz = (foyer.cy + 0.5) * CELL;
   const spawns = [[fx + 1, fz - 1], [fx + 1, fz + 1], [fx - 1, fz - 1], [fx - 1, fz + 1], [fx + 2.2, fz], [fx - 0.2, fz]];
   const exit = { x: foyer.x * CELL, z: (cy0 + 0.5) * CELL, L: 0 };
+  // the one blueprint of the house lies on a small table just inside the front door (no rng: the first free spot)
+  const blueprint = (() => {
+    for (const [dx, dz] of [[2.1, -2.0], [2.1, 2.0], [2.1, -3.1], [2.1, 3.1], [3.3, -2.0], [3.3, 2.0]]) {
+      const x = exit.x + dx, z = exit.z + dz;
+      if (props.some((p) => p.L === 0 && Math.abs(p.x - x) < p.hw + 0.9 && Math.abs(p.z - z) < p.hd + 0.8)) continue;
+      if (spawns.some(([sx, sz]) => edist(sx - x, sz - z) < 1.3)) continue;
+      return { x, z, L: 0 };
+    }
+    return { x: exit.x + 2.1, z: exit.z - 2.0, L: 0 };
+  })();
 
   return Object.assign(map, {
-    talismans, batteries, bells, souls, monsterSpawn, doors, props, bulbs, writings, blood, spawns, exit, hides, notes, shrine,
+    talismans, batteries, bells, souls, monsterSpawn, doors, props, bulbs, writings, blood, spawns, exit, hides, notes, shrine, blueprint,
   });
 }
 
@@ -611,6 +621,7 @@ export function staticColliders(map) {
     }
   }
   for (const p of map.props) if (p.type !== 'doll') out.push([p.x - p.hw, p.z - p.hd, p.x + p.hw, p.z + p.hd, p.L]);
+  if (map.blueprint) { const b = map.blueprint; out.push([b.x - 0.38, b.z - 0.62, b.x + 0.38, b.z + 0.62, b.L]); } // its table
   const sh = map.shrine;
   if (sh) {
     for (const pt of sh.points) out.push([pt.x - 0.45, pt.z - 0.45, pt.x + 0.45, pt.z + 0.45, sh.L]);

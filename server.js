@@ -93,6 +93,7 @@ function startMsg() {
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
     moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
     progress: game.progress, placed: game.placed, exitOpen: game.exitOpen, stage: game.stage,
+    bp: game.bp ? { holder: game.bp.holder, x: game.bp.x, z: game.bp.z, L: game.bp.L, onTable: game.bp.onTable } : null,
   };
 }
 
@@ -105,6 +106,7 @@ function startGame() {
   const thin = (list, mult) => list.map((b, i) => ({ ...b, taken: i >= Math.round(list.length * Math.min(1, mult)) }));
   game.batteries = thin(m.batteries, d.items);
   game.bells = thin(m.bells, d.items);
+  game.bp = { ...m.blueprint, holder: null, onTable: true }; // the one blueprint of the house
   game.souls = thin(m.souls, d.revive);
   game.progress = 0; game.placed = [null, null, null, null, null];
   game.exitOpen = false; game.sniffed = {}; game.stage = 'items';
@@ -163,7 +165,15 @@ function clearPath(L, x0, z0, x1, z1) {
   return lineOfSight(map, L, x0 + px, z0 + pz, x1 + px, z1 + pz) && lineOfSight(map, L, x0 - px, z0 - pz, x1 - px, z1 - pz);
 }
 // carried ritual items fall where you die so someone else can bring them to the star
+// the blueprint: whoever holds it drops it where they fall (or leave); if they get out, it goes back on its table
+function bpMsg(extra = {}) { const b = game.bp; return { t: 'ev', e: 'bp', holder: b.holder, x: b.x, z: b.z, L: b.L, onTable: b.onTable, ...extra }; }
+function dropBlueprint(p) {
+  const b = game.bp; if (!b || b.holder !== p.id) return;
+  Object.assign(b, { holder: null, x: p.x + rand(-0.3, 0.3), z: p.z + rand(-0.3, 0.3), L: p.L, onTable: false });
+  broadcast(bpMsg({ by: p.id, why: 'drop' }));
+}
 function dropItems(p) {
+  dropBlueprint(p);
   for (const id of p.items || []) {
     const it = game.talismans.find((q) => q.id === id);
     if (!it) continue;
@@ -634,11 +644,17 @@ wss.on('connection', (ws) => {
       if (m && !['dormant', 'bound'].includes(m.state) && m.L === me.L && Math.hypot(m.x - me.x, m.z - me.z) < 18) { m.stunT = 6; m.state = 'stunned'; froze = true; }
       if (c && ['ceiling', 'drop', 'crawl'].includes(c.state) && c.L === me.L && Math.hypot(c.x - me.x, c.z - me.z) < 18) { c.state = 'retreat'; c.t = now() + 1.2; scared = true; }
       broadcast({ t: 'ev', e: 'bell', by: me.id, x: me.x, z: me.z, L: me.L, bells: me.bells, froze, scared });
+    } else if (msg.t === 'bp') { // take the blueprint
+      const b = game.bp;
+      if (!b || b.holder || !me.alive || me.escaped || me.hid || me.L !== b.L || Math.hypot(b.x - me.x, b.z - me.z) > 2.6) return;
+      b.holder = me.id;
+      broadcast(bpMsg({ by: me.id, why: 'take' }));
     } else if (msg.t === 'escape') {
       const ex = game.map.exit;
       if (!game.exitOpen || !me.alive || me.escaped || me.L !== ex.L || Math.hypot(ex.x - me.x, ex.z - me.z) > 3) return;
       me.escaped = true;
       broadcast({ t: 'ev', e: 'escaped', id: me.id });
+      if (game.bp && game.bp.holder === me.id) { Object.assign(game.bp, { ...game.map.blueprint, holder: null, onTable: true }); broadcast(bpMsg({ by: me.id, why: 'return' })); }
       checkEnd();
     }
   });

@@ -58,6 +58,11 @@ They never move while you look at them. Look away.
 
 ## Finding your way
 
+There is **one blueprint of the house**, on a table by the front door. Whoever carries it can read it with **M**
+(1/2/3 to change floors). It shows the rooms, stairs, the shrine and the exit, but not where you are. If its
+carrier dies, it drops where they fell.
+
+
 Every room has its name above the door, and enamel signs at the corridor junctions point to the **STAIRS**, the
 **SHRINE** (basement) and the **EXIT** (ground floor).
 
@@ -99,6 +104,7 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 | Ctrl (or Alt) + move | sneak: slow and completely silent |
 | C | crouch: completely silent; with your light off she can walk right past you |
 | Space | jump (everyone sees it) |
+| M | read the house blueprint (if you carry it); 1/2/3 change floor |
 | F | flashlight (the battery drains; find spare batteries) |
 | E | take, read notes, place items on the star, hide in lockers, wardrobes and under beds, revive a friend (hold) |
 | Q | ring a **spirit bell**: freezes her for 6 seconds and scares the Crawler away |

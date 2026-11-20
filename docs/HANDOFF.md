@@ -425,6 +425,21 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   corridor lockers per floor (was 9); bells 6 with 9-cell spacing (was 11 / 6). Averages over 20 maps: props 222 ->
   317, hiding spots 115 -> 166, bells 11 -> 6 (before the difficulty multiplier).
 
+## 7h. The house blueprint (LOCAL ONLY until the owner says)
+
+- One per game. `map.blueprint` (shared/map.js, no rng: the first free spot of a fixed list ~2 m inside the front
+  door, clear of foyer props and spawns); its table is in `staticColliders` and the client's `world.colliders`.
+- Server `game.bp = { x, z, L, holder, onTable }`: `{t:'bp'}` takes it (alive, not hidden, same floor, within 2.6 m,
+  nobody holding it); `dropItems()` (death AND disconnect) drops it where the holder was; escaping puts it back on its
+  table. Every change broadcasts `ev bp { holder, x, z, L, onTable, by, why: take|drop|return }`; the start message
+  carries `bp` for late joiners.
+- Client: `buildBlueprint` (table, candle, a sheet with a tiny floor plan on it), `placeBlueprint` (sheet on the table,
+  on the floor where it fell, or hidden while held), E prompt "Take the house blueprint", objective line says who has
+  it. The holder presses **M**: `openBlueprint(L)` draws the floor plan (`drawPlan`: walls, corridors, hatched
+  stairs, room names, EXIT on the ground floor, the shrine circled in the basement); 1/2/3 switch floors, M closes.
+  **No "you are here" marker** (owner's call).
+- Tested with two players: one takes it, the other cannot; holder leaves -> it drops on the floor; picked up again.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

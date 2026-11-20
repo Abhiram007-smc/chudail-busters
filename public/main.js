@@ -252,12 +252,14 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF' && S.me?.alive && !S.me.escaped && !S.me.hidden) {
     if (S.me.battery > 0) { S.me.fl = !S.me.fl; audio.click(); }
   }
+  if (e.code === 'KeyM' && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else if (S.bp?.holder === S.myId) openBlueprint(S.me.L); else if (S.bp) message(S.bp.holder ? `${whoName(S.bp.holder)} has the blueprint.` : 'The blueprint of the house is on a table by the front door.'); return; }
+  if (S.bpOpen && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { openBlueprint({ Digit1: -1, Digit2: 0, Digit3: 1 }[e.code]); return; }
   if ((e.code === 'KeyE' || e.code === 'Escape') && S.reading) { closeNote(); return; }
   if (e.code === 'KeyE' && S.me?.hidden) { send({ t: 'unhide' }); return; }
   if (e.code === 'KeyE' && S.prompt && S.prompt.note) { openNote(S.prompt.id); S.prompt = null; return; }
   if (e.code === 'KeyE' && S.prompt && S.prompt.place) { send({ t: 'place', slot: S.prompt.slot }); S.prompt = null; return; }
   if (e.code === 'KeyE' && S.prompt && !S.prompt.revive) {
-    if (S.prompt.hide) send({ t: 'hide', id: S.prompt.id }); else send({ t: 'pickup', id: S.prompt.id });
+    if (S.prompt.hide) send({ t: 'hide', id: S.prompt.id }); else if (S.prompt.id === 'bp') send({ t: 'bp' }); else send({ t: 'pickup', id: S.prompt.id });
     S.prompt = null;
   }
   if ((e.ctrlKey || e.metaKey) && ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyF', 'KeyE'].includes(e.code)) e.preventDefault();
@@ -374,6 +376,7 @@ function buildGame(m) {
   scene.add(camera);
   S.world = buildWorld(scene, map);
   try { S.statues = buildStatues({ map, world: S.world, seed: m.seed }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
+  buildBlueprint(map, m.bp);
 
   S.hemi = new THREE.HemisphereLight(0x2a3448, 0x140c08, 0.9); scene.add(S.hemi);
   playerGlow = new THREE.PointLight(0x8a96b0, 1.2, 6, 1.6); camera.add(playerGlow);
@@ -747,6 +750,15 @@ function onEvent(m) {
       buildIcons(); setObjective(); renderClues();
       break;
     }
+    case 'bp': { // the blueprint changed hands, fell, or went back on its table
+      S.bp = { holder: m.holder, x: m.x, z: m.z, L: m.L, onTable: m.onTable };
+      placeBlueprint();
+      if (m.why === 'take') message(m.by === S.myId ? 'You took the house blueprint. Press M to read it.' : `${nameOf(m.by)} took the house blueprint.`);
+      else if (m.why === 'drop') { message(`The blueprint fell where ${nameOf(m.by)} was.`); if (m.by === S.myId) closeBlueprint(); }
+      else if (m.why === 'return') { message('The blueprint is back on its table by the front door.'); if (m.by === S.myId) closeBlueprint(); }
+      setObjective();
+      break;
+    }
     case 'jump': { const r = S.players.get(m.id); if (r && m.id !== S.myId) r.jt = 0; break; }
     case 'stare': { // you looked at her down the hall, and she stopped to look back
       if (m.id === S.myId) { audio.stareDrone(2.6); S.stareUntil = performance.now() / 1000 + 3.2; }
@@ -835,6 +847,7 @@ function playEnding() {
 }
 
 function onEnd(m) {
+  closeBlueprint();
   if (S.intro && S.intro.outro) { S.pendingEnd = m; return; } // let the drive away finish first
   if (S.intro) { S.intro.abort(); S.intro = null; $('hud').classList.add('show'); }
   S.phase = 'ended';
@@ -858,7 +871,8 @@ function setObjective() {
     item(st !== 'items', st === 'items', `Place them on the star in the basement shrine <span class="n">(${placedN}/${TALISMANS})</span>`) +
     item(st === 'escape', st === 'lure', 'Lure the Chudail into the centre of the star') +
     item(false, st === 'escape', 'Escape through the front door (ground floor)') +
-    (carried.length ? `<div class="n" style="margin-top:6px;color:#ffb070">Carrying: ${carried.map(esc).join(', ')}</div>` : '');
+    (carried.length ? `<div class="n" style="margin-top:6px;color:#ffb070">Carrying: ${carried.map(esc).join(', ')}</div>` : '') +
+    (S.bp?.holder === S.myId ? '<div class="n" style="margin-top:6px;color:#9fd0ff">You have the house blueprint: press <b>M</b></div>' : S.bp?.holder ? `<div class="n" style="margin-top:6px;color:#7f9fb8">${esc(whoName(S.bp.holder))} has the blueprint</div>` : '');
 }
 
 // briefing shown on the "click to enter" screen at the start of a game
@@ -878,6 +892,7 @@ function showBriefing(target = $('brief')) {
       <li>Hide in lockers, wardrobes and under beds, but never while she is watching.</li>
       <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent. <kbd>Space</kbd> jump.</li>
       <li>Something lives on the ceiling once the first item is taken. Look up.</li>
+      <li>There is <b>one blueprint of the house</b> on a table by the front door. Whoever carries it can read it with <kbd>M</kbd>. If they fall, it falls with them.</li>
     </ul>`;
   target.style.display = 'block';
 }
@@ -974,6 +989,83 @@ function showGhost(x, z, until, kind) {
   S.ghostState = { until, seen: false, kind, lookT: 0 };
 }
 function hideGhost() { S.ghost.visible = false; S.ghost.userData.setCrawl?.(0, 1, WALL_H, true); S.ghostState = null; }
+
+// ---------------- the blueprint of the house ----------------
+function whoName(id) { return id === S.myId ? 'You' : S.players.get(id)?.name || 'Someone'; }
+// one table by the front door; the sheet lies on it (or wherever its holder fell). Only its holder can read it (M).
+function drawPlan(c, L, { labels = true } = {}) {
+  const map = S.map, W = map.W, H = map.H, g = c.getContext('2d'), sz = c.width;
+  const walk = (i, j) => { if (i < 0 || j < 0 || i >= W || j >= H) return false; const t = map.grid[L][j * W + i]; return t === 1 || t === 2 || t === 3 || t === 4; };
+  // the occupied part of the grid, with a margin
+  let i0 = W, i1 = 0, j0 = H, j1 = 0;
+  for (const LL of LEVELS) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const t = map.grid[LL][j * W + i]; if (t) { i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j); } }
+  const span = Math.max(i1 - i0, j1 - j0) + 3, cs = (sz * 0.86) / span, ox = (sz - (i1 - i0 + 1) * cs) / 2 - i0 * cs, oy = (sz - (j1 - j0 + 1) * cs) / 2 - j0 * cs + sz * 0.03;
+  g.fillStyle = '#1b4a86'; g.fillRect(0, 0, sz, sz);
+  g.strokeStyle = 'rgba(160,200,255,0.12)'; g.lineWidth = 1;
+  for (let k = 0; k <= sz; k += cs) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, sz); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(sz, k); g.stroke(); }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    if (!walk(i, j)) continue;
+    const t = map.grid[L][j * W + i];
+    g.fillStyle = t === 2 ? 'rgba(220,235,255,0.10)' : t === 3 || t === 4 ? 'rgba(220,235,255,0.28)' : 'rgba(220,235,255,0.18)';
+    g.fillRect(ox + i * cs, oy + j * cs, cs + 0.5, cs + 0.5);
+    if (t === 3 || t === 4) { g.strokeStyle = 'rgba(235,245,255,0.7)'; g.lineWidth = 1; for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(ox + i * cs + (k * cs) / 4, oy + j * cs + 2); g.lineTo(ox + i * cs + (k * cs) / 4, oy + (j + 1) * cs - 2); g.stroke(); } }
+  }
+  g.strokeStyle = '#e8f1ff'; g.lineWidth = Math.max(1.5, cs * 0.12); g.lineCap = 'round';
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    if (!walk(i, j)) continue;
+    const x = ox + i * cs, y = oy + j * cs;
+    if (!walk(i - 1, j)) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + cs); g.stroke(); }
+    if (!walk(i + 1, j)) { g.beginPath(); g.moveTo(x + cs, y); g.lineTo(x + cs, y + cs); g.stroke(); }
+    if (!walk(i, j - 1)) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + cs, y); g.stroke(); }
+    if (!walk(i, j + 1)) { g.beginPath(); g.moveTo(x, y + cs); g.lineTo(x + cs, y + cs); g.stroke(); }
+  }
+  if (!labels) return;
+  g.fillStyle = '#f2f7ff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `bold ${Math.max(13, cs * 0.66)}px "Courier Prime", monospace`;
+  for (const r of map.rooms) if (r.L === L) g.fillText(r.label, ox + (r.cx + 0.5) * cs, oy + (r.cy + 0.5) * cs, r.w * cs - 4);
+  const mark = (x, z, text, col) => { g.fillStyle = col; g.font = `bold ${Math.max(15, cs * 0.85)}px "Courier Prime", monospace`; g.fillText(text, ox + (x / CELL) * cs, oy + (z / CELL) * cs); };
+  if (L === 0) mark(map.exit.x - CELL * 0.2, map.exit.z - CELL * 0.75, 'EXIT ▼', '#ffd27a');
+  if (map.shrine && map.shrine.L === L) { g.strokeStyle = '#ff9a8a'; g.lineWidth = 2; g.beginPath(); g.arc(ox + (map.shrine.x / CELL) * cs, oy + (map.shrine.z / CELL) * cs, cs * 1.4, 0, 7); g.stroke(); }
+  g.fillStyle = '#e8f1ff'; g.textAlign = 'left'; g.font = `${Math.round(sz * 0.032)}px "IM Fell English SC", serif`;
+  g.fillText(`ASHGROVE SANATORIUM · ${LEVEL_NAMES[L].toUpperCase()}`, sz * 0.05, sz * 0.05);
+  g.textAlign = 'right'; g.font = `${Math.round(sz * 0.022)}px "Courier Prime", monospace`;
+  g.fillText('1 basement · 2 ground · 3 upper · M close', sz * 0.95, sz * 0.96);
+}
+function buildBlueprint(map, state) {
+  if (!map.blueprint) { S.bp = null; return; }
+  const b = map.blueprint, g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.8 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.06, 1.2), wood); top.position.y = 0.8; g.add(top);
+  for (const [x, z] of [[-0.32, -0.54], [0.32, -0.54], [-0.32, 0.54], [0.32, 0.54]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.8, 0.06), wood); l.position.set(x, 0.4, z); g.add(l); }
+  const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 8), new THREE.MeshStandardMaterial({ color: 0xd8cfb0 })); candle.position.set(0.22, 0.91, -0.45); g.add(candle);
+  const flame = new THREE.PointLight(0xffa860, 1.6, 4, 1.6); flame.position.set(0.22, 1.05, -0.45); g.add(flame);
+  g.position.set(b.x, b.L * FLOOR_H, b.z); S.world.levelGroups[b.L].add(g); g.position.y = 0;
+  S.world.colliders.push([b.x - 0.38, b.z - 0.62, b.x + 0.38, b.z + 0.62, b.L]);
+  const c = TX.canvas(512); drawPlan(c, 0, { labels: false });
+  const tex = TX.toTex(c, { repeat: false });
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0x0a1a33 }));
+  sheet.rotation.x = -Math.PI / 2; S.scene.add(sheet);
+  S.bpSheet = sheet;
+  S.bp = state ? { ...state } : { holder: null, x: b.x, z: b.z, L: b.L, onTable: true };
+  placeBlueprint();
+}
+function placeBlueprint() {
+  const sh = S.bpSheet; if (!sh || !S.bp) return;
+  sh.visible = !S.bp.holder;
+  sh.position.set(S.bp.x, S.bp.L * FLOOR_H + (S.bp.onTable ? 0.835 : 0.02), S.bp.z);
+  sh.rotation.z = S.bp.onTable ? 0.1 : (S.bp.x * 7.3) % 6.28;
+}
+function openBlueprint(L) {
+  let el = $('bpview');
+  if (!el) {
+    el = document.createElement('canvas'); el.id = 'bpview';
+    Object.assign(el.style, { position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%) rotate(-1deg)', width: 'min(86vh, 92vw)', height: 'min(86vh, 92vw)', zIndex: 7, boxShadow: '0 0 60px #000, 0 0 0 6px #d8d0b8', pointerEvents: 'none' });
+    document.body.appendChild(el);
+  }
+  el.width = el.height = 1100; drawPlan(el, L); el.style.display = 'block';
+  S.bpOpen = true; audio.paper?.();
+}
+function closeBlueprint() { const el = $('bpview'); if (el) el.style.display = 'none'; if (S.bpOpen) audio.paper?.(); S.bpOpen = false; }
 
 // a face in the wall next to you: it lunges out at you, screaming, then sinks back
 function wallFace(t) {
@@ -1662,6 +1754,7 @@ function updateInteract() {
   }
   for (const [id, n] of S.world.notes) if (here(n)) consider(id, n.x, n.z, 1.8, n.read ? 'Read the note again' : 'Read the note');
   if (!best) for (const [id, h] of S.world.hides) if (here(h)) consider(id, h.x + h.fx * (h.type === 'bed' ? 1.15 : 0.5), h.z + h.fz * (h.type === 'bed' ? 1.15 : 0.5), 1.7, h.type === 'bed' ? 'Hide under the bed' : `Hide in the ${h.type}`);
+  if (S.bp && !S.bp.holder && here(S.bp) && !best) consider('bp', S.bp.x, S.bp.z, 2.3, 'Take the house blueprint');
   if (best && best.id[0] === 'h') best.hide = true;
   if (best && best.id[0] === 'n') best.note = true;
   if (me.hidden) { const ht = S.world.hides.get(me.hidden)?.type || 'locker'; setPrompt(ht === 'bed' ? '<b>E</b>Crawl out from under the bed' : `<b>E</b>Get out of the ${ht}`); S.prompt = null; return; }
