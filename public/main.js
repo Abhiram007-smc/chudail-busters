@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, GHOST_TYPES, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, GHOST_TYPES, MAP_THEMES, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray, getModel } from './entities.js';
@@ -145,7 +145,7 @@ function handle(m) {
     case 'welcome': S.myId = m.id; S.myColor = m.color; break;
     case 'full': $('joinBtn').disabled = false; $('joinBtn').textContent = 'Asylum full (6/6). Retry'; ws.close(); S.phase = 'menu'; break;
     case 'lobby':
-      S.lobby = m.players; if (m.difficulty) S.difficulty = m.difficulty; renderLobby();
+      S.lobby = m.players; if (m.difficulty) S.difficulty = m.difficulty; if (m.mapChoice) S.mapChoice = m.mapChoice; renderLobby();
       if (m.countdown > 0 && !S.countdownTimer && S.phase === 'lobby') showCountdown(m.countdown);
       if (m.publicUrl && m.publicUrl !== S.publicUrl) { S.publicUrl = m.publicUrl; loadShare(); }
       if (m.phase === 'lobby') {
@@ -182,6 +182,13 @@ function renderLobby() {
   const tips = { easy: 'slower, half-blind, plenty of supplies, no crawler', normal: 'the way it was meant to be', hard: 'faster, sharper ears, fewer supplies', nightmare: 'she hears everything. good luck.' };
   dEl.innerHTML = Object.entries(DIFFICULTY).map(([k, d]) => `<button data-k="${k}" class="${k === S.difficulty ? 'on' : ''}">${d.label}</button>`).join('') + `<div class="tip">${tips[S.difficulty] || ''}</div>`;
   dEl.querySelectorAll('button').forEach((b) => { b.disabled = !!S.spectator; b.onclick = () => { send({ t: 'difficulty', key: b.dataset.k }); audio.click(); }; });
+  // which house: random, or one of the places
+  let mEl = $('mapPick');
+  if (!mEl) { mEl = document.createElement('div'); mEl.id = 'mapPick'; mEl.className = 'diff'; dEl.after(mEl); const lb = document.createElement('label'); lb.textContent = 'Place'; mEl.before(lb); }
+  const mc = S.mapChoice || 'random';
+  mEl.innerHTML = [['random', 'Random'], ...Object.entries(MAP_THEMES).map(([k, t]) => [k, t.name])].map(([k, n]) => `<button data-k="${k}" class="${k === mc ? 'on' : ''}">${esc(n)}</button>`).join('') +
+    `<div class="tip">${mc === 'random' ? 'a different house every night' : esc(MAP_THEMES[mc].story)}</div>`;
+  mEl.querySelectorAll('button').forEach((b) => { b.disabled = !!S.spectator; b.onclick = () => { send({ t: 'mapChoice', key: b.dataset.k }); audio.click(); }; });
   $('startBtn').style.display = S.spectator ? 'none' : '';
   $('chars').style.display = S.spectator ? 'none' : '';
   if (S.spectator) { $('pcount').textContent = `${S.lobby.length}/6 · you are a hidden spectator`; return; }
@@ -300,7 +307,7 @@ addEventListener('keydown', (e) => {
     if (S.me.battery > 0) { S.me.fl = !S.me.fl; audio.click(); }
   }
   if (is(e, 'ping') && S.me?.alive && !S.me.escaped && !S.me.hidden) { doPing(); return; }
-  if (is(e, 'map') && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else if (S.bp?.holder === S.myId) openBlueprint(S.me.L); else if (S.bp) message(S.bp.holder ? `${whoName(S.bp.holder)} has the blueprint.` : 'The blueprint of the house is on a table by the front door.'); return; }
+  if (is(e, 'map') && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else openBlueprint(S.me.L); return; } // everyone carries the blueprint
   if (S.bpOpen && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { openBlueprint({ Digit1: -1, Digit2: 0, Digit3: 1 }[e.code]); return; }
   if ((is(e, 'interact') || e.code === 'Escape') && S.reading) { closeNote(); return; }
   if (is(e, 'interact') && S.me?.hidden) { send({ t: 'unhide' }); return; }
@@ -439,7 +446,7 @@ function startGame(m) {
 
 function buildGame(m) {
   clog('building the house');
-  const map = (S.map = generateMap(m.seed));
+  const map = (S.map = generateMap(m.seed, m.theme || 'sanatorium'));
   S.mapBad = m.sig != null && mapSignature(map) !== m.sig;
   if (S.mapBad) console.error('map out of sync with the server', mapSignature(map), m.sig);
   const scene = (S.scene = new THREE.Scene());
@@ -451,7 +458,7 @@ function buildGame(m) {
   // a cold light that only matters in the mirrors: it lights her up behind you (made once; never toggled, only dimmed)
   S.mirrorLight = new THREE.PointLight(0xa8b8ff, 0, 4.5, 1.4); scene.add(S.mirrorLight);
   try { S.mirrors = SETTINGS.quality !== 'low' ? buildMirrors({ map, world: S.world, seed: m.seed, avoid: S.statues?.list || [] }) : null; } catch (e) { console.warn('mirrors failed', e); S.mirrors = null; }
-  buildBlueprint(map, m.bp);
+  S.bp = null; // (there used to be one blueprint on a table; now everyone has their own)
   document.body.classList.add('ingame');
   S.ghostType = GHOST_TYPES[m.ghostType] ? m.ghostType : 'chudail';
   S.voice?.stop(); S.voice = null;
@@ -558,7 +565,7 @@ function buildGame(m) {
     showScreen(''); $('hud').classList.remove('show');
     clog('intro playing');
     S.intro = playIntro({
-      renderer, assets: S.introAssets, audio, calm: FX.calm,
+      renderer, assets: S.introAssets, audio, calm: FX.calm, place: (MAP_THEMES[S.map?.theme] || MAP_THEMES.sanatorium).short,
       players: [...m.players].sort((a, b) => a.id - b.id), meId: S.myId,
       onDone: () => { S.intro = null; $('hud').classList.add('show'); enterHouse(m, true); },
     });
@@ -760,7 +767,7 @@ function onEvent(m) {
     case 'escaped': {
       if (m.id === S.myId) {
         S.me.escaped = true; S.black = 0; S.whiteOut = 1;
-        message('You escaped Ashgrove. She will not follow you.');
+        message(`You escaped ${(MAP_THEMES[S.map?.theme] || MAP_THEMES.sanatorium).name}. She will not follow you.`);
         audio.setChase(false);
         playEnding();
       } else {
@@ -939,7 +946,7 @@ function playEnding() {
     const out = [{ id: S.myId, name: S.name, char: S.myChar }];
     for (const [id, r] of S.players) if (r.escaped && id !== S.myId) out.push({ id, name: r.name, char: r.char });
     $('hud').classList.remove('show'); showScreen('');
-    S.intro = playOutro({ renderer, assets: { car }, players: out, meId: S.myId, audio, onDone: after });
+    S.intro = playOutro({ renderer, assets: { car }, players: out, meId: S.myId, audio, onDone: after, place: (MAP_THEMES[S.map?.theme] || MAP_THEMES.sanatorium).short });
     if (!S.intro) after();
   });
 }
@@ -975,13 +982,16 @@ function setObjective() {
     item(st === 'escape', st === 'lure', 'Lure the Chudail into the centre of the star') +
     item(false, st === 'escape', 'Escape through the front door (ground floor)') +
     (carried.length ? `<div class="n" style="margin-top:6px;color:#ffb070">Carrying: ${carried.map(esc).join(', ')}</div>` : '') +
-    (S.bp?.holder === S.myId ? '<div class="n" style="margin-top:6px;color:#9fd0ff">You have the house blueprint: press <b>M</b></div>' : S.bp?.holder ? `<div class="n" style="margin-top:6px;color:#7f9fb8">${esc(whoName(S.bp.holder))} has the blueprint</div>` : '');
+    '<div class="n" style="margin-top:6px;color:#9fd0ff">Blueprint of the house: press <b>M</b></div>';
 }
 
 // briefing shown on the "click to enter" screen at the start of a game
 function showBriefing(target = $('brief')) {
   const gt = GHOST_TYPES[S.ghostType] || GHOST_TYPES.chudail;
+  const place = MAP_THEMES[S.map?.theme] || MAP_THEMES.sanatorium;
   target.innerHTML = `
+    <div class="bh">${esc(place.name.toUpperCase())}</div>
+    <p style="margin:0 0 12px">${esc(place.story)}</p>
     <div class="bh" style="color:#ff8a7a">TONIGHT SHE IS ${esc(gt.name.toUpperCase())}</div>
     <p style="margin:0 0 12px">${esc(gt.hint)}</p>
     <div class="bh">YOUR OBJECTIVES</div>
@@ -998,7 +1008,7 @@ function showBriefing(target = $('brief')) {
       <li>Hide in lockers, wardrobes and under beds, but never while she is watching.</li>
       <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent. <kbd>Space</kbd> jump.</li>
       <li>Something lives on the ceiling once the first item is taken. Look up.</li>
-      <li>There is <b>one blueprint of the house</b> on a table by the front door. Whoever carries it can read it with <kbd>M</kbd>. If they fall, it falls with them.</li>
+      <li>Everyone has a <b>blueprint of the house</b>: press <kbd>M</kbd> (1/2/3 for the floors). It does not show where you are.</li>
     </ul>`;
   target.style.display = 'block';
 }
@@ -1235,7 +1245,7 @@ function drawPlan(c, L, { labels = true } = {}) {
   if (L === 0) mark(map.exit.x - CELL * 0.2, map.exit.z - CELL * 0.75, 'EXIT ▼', '#ffd27a');
   if (map.shrine && map.shrine.L === L) { g.strokeStyle = '#ff9a8a'; g.lineWidth = 2; g.beginPath(); g.arc(ox + (map.shrine.x / CELL) * cs, oy + (map.shrine.z / CELL) * cs, cs * 1.4, 0, 7); g.stroke(); }
   g.fillStyle = '#e8f1ff'; g.textAlign = 'left'; g.font = `${Math.round(sz * 0.032)}px "IM Fell English SC", serif`;
-  g.fillText(`ASHGROVE SANATORIUM · ${LEVEL_NAMES[L].toUpperCase()}`, sz * 0.05, sz * 0.05);
+  g.fillText(`${(MAP_THEMES[S.map.theme] || MAP_THEMES.sanatorium).name.toUpperCase()} · ${LEVEL_NAMES[L].toUpperCase()}`, sz * 0.05, sz * 0.05);
   g.textAlign = 'right'; g.font = `${Math.round(sz * 0.022)}px "Courier Prime", monospace`;
   g.fillText('1 basement · 2 ground · 3 upper · M close', sz * 0.95, sz * 0.96);
 }
@@ -1979,7 +1989,6 @@ function updateInteract() {
   }
   for (const [id, n] of S.world.notes) if (here(n)) consider(id, n.x, n.z, 1.8, n.read ? 'Read the note again' : 'Read the note');
   if (!best) for (const [id, h] of S.world.hides) if (here(h)) consider(id, h.x + h.fx * (h.type === 'bed' ? 1.15 : 0.5), h.z + h.fz * (h.type === 'bed' ? 1.15 : 0.5), 1.7, h.type === 'bed' ? 'Hide under the bed' : `Hide in the ${h.type}`);
-  if (S.bp && !S.bp.holder && here(S.bp) && !best) consider('bp', S.bp.x, S.bp.z, 2.3, 'Take the house blueprint');
   if (best && best.id[0] === 'h') best.hide = true;
   if (best && best.id[0] === 'n') best.note = true;
   if (me.hidden) { const ht = S.world.hides.get(me.hidden)?.type || 'locker'; setPrompt(ht === 'bed' ? '<b>E</b>Crawl out from under the bed' : `<b>E</b>Get out of the ${ht}`); S.prompt = null; return; }

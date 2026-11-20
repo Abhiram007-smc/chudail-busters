@@ -18,7 +18,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const FRONT = -61; // front wall of the house
 function groundY(z) { if (z > -58.4) return 0; if (z > -59.6) return Math.min(0.6, 0.2 * Math.ceil((-58.4 - z) / 0.4 + 1e-6)); return 0.6; }
 
-export function buildDrag({ assets, charKey }) {
+export function buildDrag({ assets, charKey, place = 'ASHGROVE' }) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x070a10);
   scene.fog = new THREE.FogExp2(0x101622, 0.02);
@@ -86,7 +86,7 @@ export function buildDrag({ assets, charKey }) {
     const p = box(1.0, 1.4, 0.05, k === 1 || k === 6 ? litPane : darkPane, x, y, FRONT + 0.23); panes.push(p);
   });
   const watcher = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16), mat({ color: 0x000000 })); watcher.scale.set(0.8, 1.6, 1); watcher.position.set(2.8, 5.35, FRONT + 0.27); scene.add(watcher); disposables.push(watcher.geometry);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), mat({ map: tex(TX.signCanvas('ASHGROVE')), transparent: true })); sign.position.set(0, 3.2, FRONT + 0.2); scene.add(sign); disposables.push(sign.geometry);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), mat({ map: tex(TX.signCanvas(place)), transparent: true })); sign.position.set(0, 3.2, FRONT + 0.2); scene.add(sign); disposables.push(sign.geometry);
   // porch: steps, deck, posts, roof, a dying bulb
   const boardM = mat({ map: tex(TX.plainWoodCanvas([60, 44, 30]), 2, 2), roughness: 0.9 });
   for (let k = 0; k < 3; k++) box(4.2, 0.2 * (k + 1), 0.4, boardM, 0, 0.1 * (k + 1), -58.6 - k * 0.4);
@@ -258,8 +258,8 @@ function crackCanvas() {
   for (let r = 18; r < 120; r += rnd(18, 30)) { g.beginPath(); for (let k = 0; k <= 24; k++) { const a = (k / 24) * Math.PI * 2; g.lineTo(cx + Math.cos(a) * r * rnd(0.9, 1.1), cy + Math.sin(a) * r * 0.6 * rnd(0.9, 1.1)); } g.stroke(); }
   return c;
 }
-export function buildOutro({ assets, players, meId }) {
-  const base = buildDrag({ assets, charKey: null });
+export function buildOutro({ assets, players, meId, place }) {
+  const base = buildDrag({ assets, charKey: null, place });
   const { scene, cam, her, lay } = base;
   lay.visible = false;
   base.setDoor(1); base.hazard.intensity = 0; base.beam.intensity = 0;

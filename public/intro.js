@@ -511,7 +511,7 @@ function buildLive(assets, players, hooks = {}) {
 
 // ---------------------------------------------------------------- the whole sequence
 export { buildLive as _buildLive, buildDialogue as _buildDialogue };
-export function playIntro({ renderer, assets, players, meId, audio, calm, onDone }) {
+export function playIntro({ renderer, assets, players, meId, audio, calm, onDone, place }) {
   const el = document.getElementById('intro');
   const video = el.querySelector('video');
   const fade = el.querySelector('.ifade');
@@ -613,7 +613,7 @@ export function playIntro({ renderer, assets, players, meId, audio, calm, onDone
     live?.dispose(); live = null;
     video.pause(); el.classList.add('live'); // the 3D view shows through
     const me = players.find((p) => p.id === meId) || players[0];
-    try { drag = buildDrag({ assets, charKey: me && me.char }); } catch (e) { console.warn('drag scene failed', e); endDrag(false); return; }
+    try { drag = buildDrag({ assets, charKey: me && me.char, place }); } catch (e) { console.warn('drag scene failed', e); endDrag(false); return; }
     if (window.__hm) window.__hm.dragLive = drag; // for automated tests
     phase = 'drag'; dragT = 0;
     fade.style.transition = 'none';
@@ -697,12 +697,12 @@ export function playIntro({ renderer, assets, players, meId, audio, calm, onDone
 
 // ---------------------------------------------------------------- the ending: driving away from Ashgrove
 // Everyone who got out is in the (wrecked) car; it pulls away from the house and onto the road. public/drag.js buildOutro.
-export function playOutro({ renderer, assets, players, meId, audio, onDone }) {
+export function playOutro({ renderer, assets, players, meId, audio, onDone, place }) {
   const el = document.getElementById('intro');
   const video = el.querySelector('video'), fade = el.querySelector('.ifade'), sub = el.querySelector('.isub');
   const snd = introSound(audio);
   let o;
-  try { o = buildOutro({ assets, players, meId }); } catch (e) { console.warn('outro failed', e); onDone(); return null; }
+  try { o = buildOutro({ assets, players, meId, place }); } catch (e) { console.warn('outro failed', e); onDone(); return null; }
   el.className = 'show live'; video.pause();
   fade.style.transition = 'none'; fade.style.opacity = 1; fade.style.background = '#000';
   sub.innerHTML = ''; sub.style.opacity = 0;

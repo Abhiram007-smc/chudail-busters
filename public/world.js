@@ -78,6 +78,16 @@ export function buildWorld(scene, map) {
   const woodFloor = mat(TX.woodFloorCanvas(), { bump: 1.5, rough: 0.8 });
   const tileFloor = mat(TX.tileFloorCanvas(), { bump: 1.2, rough: 0.55 });
   const ceilMat = mat(TX.ceilingCanvas(), { bump: 2 });
+  // each place has its own colours: the Haveli is warm red-ochre lime plaster and dark sheesham floors, the School
+  // institutional green walls and pale floors (the textures stay, the colour multiplies them)
+  const TINT = {
+    haveli: { walls: [0xd9946a, 0xc98a5e, 0xe0a070], wood: 0x9a5a3a, tile: 0xc0a080, ceil: 0xc89a78 },
+    school: { walls: [0xa8c8a8, 0xb8d0b8, 0x9cbca8], wood: 0xc8b49a, tile: 0xd8d8c8, ceil: 0xd0d8c8 },
+  }[map.theme];
+  if (TINT) {
+    wallMats.forEach((m, k) => m.color.setHex(TINT.walls[k]));
+    woodFloor.color.setHex(TINT.wood); tileFloor.color.setHex(TINT.tile); ceilMat.color.setHex(TINT.ceil);
+  }
   const woodDark = mat(TX.plainWoodCanvas([52, 33, 20]), { rough: 0.8 });
   const woodPale = mat(TX.plainWoodCanvas([92, 70, 50]), { rough: 0.85 });
   const metal = mat(TX.rustCanvas(), { rough: 0.6, metal: 0.55 });

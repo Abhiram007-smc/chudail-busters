@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, DIFFICULTY, GHOST_TYPES, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, resolveSolid, isWall, cellOf, stairTransition,
+  CELL, TALISMANS, DIFFICULTY, GHOST_TYPES, MAP_THEMES, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, resolveSolid, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +61,7 @@ const server = http.createServer((req, res) => {
 
 // ---------------- game state ----------------
 const game = {
-  phase: 'lobby', players: new Map(), map: null, seed: 0, monster: null, difficulty: 'normal',
+  phase: 'lobby', players: new Map(), map: null, seed: 0, monster: null, difficulty: 'normal', mapChoice: 'random', theme: 'sanatorium',
   talismans: [], batteries: [], bells: [], souls: [], progress: 0, placed: [null, null, null, null, null],
   exitOpen: false, startTime: 0, nextScare: 0, endTimer: null, time: 0, stage: 'items',
 };
@@ -78,7 +78,7 @@ const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function lobbyMsg() {
-  return { t: 'lobby', phase: game.phase, difficulty: game.difficulty, countdown: game.countdown ? Math.max(0, game.countdownAt - now()) : 0, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
+  return { t: 'lobby', phase: game.phase, difficulty: game.difficulty, mapChoice: game.mapChoice, countdown: game.countdown ? Math.max(0, game.countdownAt - now()) : 0, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
 }
 
 function freeColor() {
@@ -88,7 +88,7 @@ function freeColor() {
 
 function startMsg() {
   return {
-    t: 'start', seed: game.seed, intro: now() - game.startTime < 4, sig: mapSignature(game.map), difficulty: game.difficulty,
+    t: 'start', seed: game.seed, theme: game.theme, intro: now() - game.startTime < 4, sig: mapSignature(game.map), difficulty: game.difficulty,
     players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char, x: p.x, z: p.z, L: p.L, alive: p.alive, escaped: p.escaped, items: p.items })),
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
     moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
@@ -100,14 +100,15 @@ function startMsg() {
 
 function startGame() {
   game.seed = (Math.random() * 2 ** 31) >>> 0;
-  game.map = generateMap(game.seed);
+  { const places = Object.keys(MAP_THEMES); game.theme = MAP_THEMES[game.mapChoice] ? game.mapChoice : places[Math.floor(Math.random() * places.length)]; }
+  game.map = generateMap(game.seed, game.theme);
   const m = game.map, d = D();
   game.talismans = m.talismans.map((t) => ({ ...t, taken: false }));
   // fewer supplies on harder difficulties (removed items start "taken")
   const thin = (list, mult) => list.map((b, i) => ({ ...b, taken: i >= Math.round(list.length * Math.min(1, mult)) }));
   game.batteries = thin(m.batteries, d.items);
   game.bells = thin(m.bells, d.items);
-  game.bp = { ...m.blueprint, holder: null, onTable: true }; // the one blueprint of the house
+  game.bp = null; // everyone carries a blueprint now (M); the old single one on a table is gone
   { const types = Object.keys(GHOST_TYPES); game.ghostType = types[Math.floor(Math.random() * types.length)]; } // what she is tonight
   game.souls = thin(m.souls, d.revive);
   game.progress = 0; game.placed = [null, null, null, null, null];
@@ -123,7 +124,7 @@ function startGame() {
   };
   game.phase = 'playing';
   broadcast(startMsg());
-  console.log(`[game] started with ${game.players.size} player(s), seed ${game.seed}, ${game.difficulty}`);
+  console.log(`[game] started with ${game.players.size} player(s), seed ${game.seed}, ${game.difficulty}, ${game.theme}`);
 }
 
 function spawnPlayer(p, n) {
@@ -603,6 +604,7 @@ wss.on('connection', (ws) => {
     }
     if (msg.t === 'char' && CHARS.includes(msg.char)) { me.char = msg.char; broadcast(lobbyMsg()); return; }
     if (msg.t === 'difficulty' && game.phase === 'lobby' && DIFFICULTY[msg.key]) { game.difficulty = msg.key; broadcast(lobbyMsg()); return; }
+    if (msg.t === 'mapChoice' && game.phase === 'lobby' && (msg.key === 'random' || MAP_THEMES[msg.key])) { game.mapChoice = msg.key; broadcast(lobbyMsg()); return; }
     if (game.phase !== 'playing') return;
     const sameL = (o) => (o.L ?? 0) === me.L;
     if (msg.t === 's') {

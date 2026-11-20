@@ -51,6 +51,12 @@ co-op the friends chat about their holiday plan on the way (silent, subtitles on
 Get out through the front door and you drive away in the same car, wrecked from the crash, with everyone who made it
 out; she watches you go from the doorway.
 
+## Three places
+
+Pick one in the lobby, or Random: **Ashgrove Sanatorium**, the **Rajmahal Haveli** (a wedding haveli locked since
+1961) or **St. Agnes' School** (shut after the hostel fire of 1988). Each has its own rooms, furniture, notes, riddles
+and writing on the walls, and its own colours. Houses are compact, with several staircases between floors.
+
 ## Settings, voice chat, phones
 
 - **Settings** (lobby or pause screen): mouse sensitivity, invert, field of view, volume, voice chat, graphics
@@ -68,9 +74,8 @@ They never move while you look at them. Look away.
 
 ## Finding your way
 
-There is **one blueprint of the house**, on a table by the front door. Whoever carries it can read it with **M**
-(1/2/3 to change floors). It shows the rooms, stairs, the shrine and the exit, but not where you are. If its
-carrier dies, it drops where they fell.
+Everyone has a **blueprint of the house**: press **M** (1/2/3 to change floors). It shows the rooms, stairs, the shrine
+and the exit, but not where you are. The top of the screen always says which floor and room you are in.
 
 
 Every room has its name above the door, and enamel signs at the corridor junctions point to the **STAIRS**, the

@@ -4,7 +4,7 @@
 export const CELL = 3;        // world units per grid cell
 export const WALL_H = 3;      // ceiling height
 export const FLOOR_H = 3;     // height of one storey
-export const GRID = 39;       // each floor is GRID x GRID cells
+export const GRID = 31;       // each floor is GRID x GRID cells (was 39: smaller houses, owner's call)
 export const LEVELS = [-1, 0, 1];
 export const LEVEL_NAMES = { '-1': 'basement', 0: 'ground floor', 1: 'upper floor' };
 export const TALISMANS = 5;   // ritual items needed for the pentagram
@@ -116,6 +116,124 @@ const ROOM_PROPS = {
 };
 const HIDE_TYPES = new Set(['locker', 'wardrobe', 'bed']);
 
+// ---------------------------------------------------------------- places: the same rules, a different house
+// Room types stay the same inside (they drive props, riddles, hiding spots); each place renames them, furnishes them
+// its own way and has its own notes and wall writing.
+export const MAP_THEMES = {
+  sanatorium: {
+    name: 'Ashgrove Sanatorium', short: 'ASHGROVE',
+    story: 'Ashgrove Sanatorium closed in 1974, the night the staff vanished. The patients whispered about a chudail: a woman with long black hair whose feet point backwards.',
+    names: ROOM_NAMES, levelTypes: LEVEL_TYPES, props: ROOM_PROPS, riddles: RIDDLES, clues: CLUE_TEMPLATES, lore: LORE_NOTES, writings: WRITINGS,
+  },
+  haveli: {
+    name: 'Rajmahal Haveli', short: 'RAJMAHAL',
+    story: 'The Rajmahal Haveli has been locked since the wedding night of 1961, when the bride vanished in her red lehenga. The servants said she came back. Her feet pointed backwards.',
+    names: { foyer: 'DEORHI', ward: 'BEDROOM', office: 'DIWANKHANA', storage: 'GODOWN', bath: 'HAMMAM', chapel: 'PUJA GHAR', nursery: "CHILDREN'S ROOM", morgue: 'TEHKHANA', surgery: 'RASOI', records: 'PUSTAKALAYA', shrine: 'THE SHRINE' },
+    levelTypes: {
+      '-1': ['morgue', 'morgue', 'storage', 'storage', 'surgery', 'records'],
+      0: ['office', 'chapel', 'surgery', 'records', 'ward', 'bath', 'office'],
+      1: ['ward', 'ward', 'nursery', 'bath', 'ward', 'storage', 'nursery'],
+    },
+    props: {
+      foyer: ['bench', 'chair', 'cabinet', 'bench'],
+      ward: ['bed', 'wardrobe', 'drawers', 'chair', 'bed'],
+      office: ['bench', 'chair', 'desk', 'bench', 'cabinet'],
+      storage: ['crates', 'crates', 'shelf', 'crates', 'cabinet'],
+      bath: ['tub', 'cabinet', 'tub'],
+      chapel: ['bench', 'pew', 'bench'],
+      nursery: ['crib', 'doll', 'doll', 'chair', 'wardrobe'],
+      morgue: ['crates', 'crates', 'drawers', 'shelf'],
+      surgery: ['desk', 'shelf', 'cabinet', 'crates'],
+      records: ['shelf', 'shelf', 'desk', 'chair', 'shelf'],
+      shrine: [],
+    },
+    riddles: {
+      ward: ['where she slept on her wedding night', 'under the bed where the anklets still ring'],
+      office: ['where the old Thakur received his guests', 'where the hookah still smells of smoke'],
+      storage: ['among the grain sacks nobody opens', 'where the dowry boxes were stacked'],
+      bath: ['where the water in the hammam turns red', 'where the marble basin is always wet'],
+      chapel: ['before the gods with their faces turned away', 'where the diya never goes out'],
+      nursery: ['where the cradle rocks on its own', 'where the children were told to be quiet'],
+      morgue: ['in the tehkhana under the house', 'where the old ones were hidden from the sun'],
+      surgery: ['where the rasoi fire went cold', 'where the copper pots hang and sway'],
+      records: ['among the horoscopes that all ended the same', 'in the room of old books and older names'],
+    },
+    clues: [
+      "From the munshi's ledger.\nThe {ITEM} was hidden {RIDDLE}, {FLOOR}.\nThe Thakur had her sign scratched beside it. This sign:",
+      "A letter, never sent.\nMaa took the {ITEM} and put it {RIDDLE}. {FLOOR_CAP}.\nShe said the bride would come looking for it. The wall there is marked:",
+      "The old ayah's prayer book, a note in the margin:\nher {ITEM} is {RIDDLE}, {FLOOR}. Do not go near the marks on the wall.",
+      "Five gifts for the star.\nThe {ITEM} is {RIDDLE}, {FLOOR}. Look for her sign near it.\nI heard her anklets and ran.",
+    ],
+    lore: [
+      'The wedding was in 1961. The bride never reached the mandap.\nThe servants found only her anklets on the stairs.',
+      'She cannot see well in the dark.\nBut she hears EVERYTHING. The anklets. The breathing. Walk slowly.',
+      'The almirahs saved my life twice.\nBut never climb in while she is watching.',
+      'Shine a light in her face and she turns away for a moment. Only for a moment.',
+      '(a child\'s drawing of a bride in red, very tall, smiling)\n\n"chachi smiles when the lamps go out"',
+      'Her name was never written in the family book. The servants called her CHUDAIL.\nLook at her feet. They point backwards.',
+      'THE SHRINE IS IN THE TEHKHANA.\nFive points on the star. Five gifts. When the star burns, she must stand in the middle.\nMake her follow you in.',
+      'The pandit hung bells in every room. Ring one and she freezes, just for a moment.',
+      'Something crawls along the ceiling beams at night. Look up.',
+    ],
+    writings: ['WHERE IS MY GROOM', 'SHE IS STILL DRESSED', 'DONT RUN', 'HER FEET POINT BACK', 'THE ANKLETS', 'STAY TOGETHER',
+      'SHE COUNTS US', 'TURN AROUND', 'NO WAY OUT', 'FIVE GIFTS', 'LISTEN', 'SHE IS DOWNSTAIRS', 'WE NEVER LEFT', 'HELP US', 'LIGHTS OUT'],
+  },
+  school: {
+    name: "St. Agnes' School", short: "ST. AGNES'",
+    story: "St. Agnes' School shut in 1988 after the night of the hostel fire. A teacher was never found. The children drew her the same way: very tall, long hair, feet pointing backwards.",
+    names: { foyer: 'ENTRANCE HALL', ward: 'CLASSROOM', office: 'STAFF ROOM', storage: 'STORE ROOM', bath: 'WASHROOMS', chapel: 'ASSEMBLY HALL', nursery: 'NURSERY CLASS', morgue: 'BOILER ROOM', surgery: 'SCIENCE LAB', records: 'LIBRARY', shrine: 'THE SHRINE' },
+    levelTypes: {
+      '-1': ['morgue', 'storage', 'morgue', 'storage', 'surgery', 'bath'],
+      0: ['ward', 'office', 'chapel', 'ward', 'records', 'bath', 'nursery'],
+      1: ['ward', 'ward', 'surgery', 'records', 'bath', 'ward', 'nursery'],
+    },
+    props: {
+      foyer: ['bench', 'desk', 'chair', 'cabinet'],
+      ward: ['desk', 'desk', 'chair', 'desk', 'chair', 'shelf'],
+      office: ['desk', 'chair', 'cabinet', 'shelf', 'desk'],
+      storage: ['crates', 'shelf', 'crates', 'cabinet', 'crates'],
+      bath: ['cabinet', 'tub', 'cabinet'],
+      chapel: ['bench', 'bench', 'pew', 'bench'],
+      nursery: ['crib', 'doll', 'chair', 'doll', 'desk'],
+      morgue: ['crates', 'crates', 'shelf', 'drawers'],
+      surgery: ['optable', 'shelf', 'cabinet', 'desk'],
+      records: ['shelf', 'shelf', 'desk', 'chair', 'shelf'],
+      shrine: [],
+    },
+    riddles: {
+      ward: ['where the last lesson was never finished', 'where the chalk still writes by itself'],
+      office: ['where the teachers argued about her', 'in the room the children were never allowed into'],
+      storage: ['behind the old exam papers', 'where the broken chairs are piled'],
+      bath: ['where the taps run at night', 'where the mirrors were all taken down'],
+      chapel: ['where we sang every morning', 'where the stage curtain moves with no wind'],
+      nursery: ['where the little ones napped', 'where the toys are still lined up'],
+      morgue: ['by the boiler that never cools', 'in the room under the stairs where it is always hot'],
+      surgery: ['where the jars on the shelves are labelled in her hand', 'where the burners are still on'],
+      records: ['among the attendance registers', 'where every name has a red line through it'],
+    },
+    clues: [
+      "Detention slip, 1987.\nThe {ITEM} was confiscated and locked {RIDDLE}, {FLOOR}.\nSomeone scratched this sign on the wall next to it:",
+      "Found in a schoolbag.\nMiss took the {ITEM} and hid it {RIDDLE}. {FLOOR_CAP}.\nShe said never to tell. The wall there is marked like this:",
+      "Principal's diary.\nThe children say her {ITEM} is {RIDDLE}, {FLOOR}. They all draw the same mark.",
+      "Five gifts for the star.\nThe {ITEM} is {RIDDLE}, {FLOOR}. Her sign is on the walls near it.\nThe bell rang and I ran.",
+    ],
+    lore: [
+      'Attendance register, 1988. Every name has a red line through it except one: hers.',
+      'She cannot see well in the dark.\nBut she hears EVERYTHING. Walk slowly. Never run in the corridors.',
+      'The lockers saved my life twice.\nBut do not climb in while she is watching.',
+      'Point the torch in her face and she flinches. She will remember who did it.',
+      '(a child\'s drawing of a very tall teacher with a long smile)\n\n"miss smiles when the lights go out"',
+      'The children called her the CHUDAIL. Look at her feet. They point backwards.',
+      'THE SHRINE IS IN THE BASEMENT, PAST THE BOILER.\nFive points on the star. Five gifts. When the star burns, she must stand in the middle.',
+      'The old school bells still work. Ring one and she freezes, just for a moment.',
+      'Something crawls on the ceiling in the corridors. Look up.',
+    ],
+    writings: ['NO RUNNING IN THE CORRIDORS', 'SHE IS IN THE STAFF ROOM', 'DONT LOOK AT HER', 'SIT DOWN', 'SILENCE',
+      'SHE COUNTS US', 'TURN AROUND', 'HELP US', 'STAY TOGETHER', 'LIGHTS OUT', 'FIVE GIFTS', 'WE ARE STILL HERE', 'HER FEET POINT BACK'],
+  },
+};
+
+
 // footprint: w = along the wall, d = out from the wall
 export const PROP_SIZE = {
   bed: [1.1, 2.0], cabinet: [1.0, 0.55], wheelchair: [0.75, 0.85], chair: [0.55, 0.55],
@@ -124,15 +242,16 @@ export const PROP_SIZE = {
   wardrobe: [1.25, 0.7], slab: [1.0, 2.1], drawers: [1.9, 0.75], optable: [1.0, 2.0],
 };
 
-export function generateMap(seed) {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const m = tryGenerate((seed + attempt * 7919) >>> 0);
-    if (m) { m.seed = seed; return m; }
+export function generateMap(seed, theme = 'sanatorium') {
+  const T = MAP_THEMES[theme] || MAP_THEMES.sanatorium;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const m = tryGenerate((seed + attempt * 7919) >>> 0, T);
+    if (m) { m.seed = seed; m.theme = MAP_THEMES[theme] ? theme : 'sanatorium'; return m; }
   }
   throw new Error('map generation failed');
 }
 
-function tryGenerate(seed) {
+function tryGenerate(seed, T) {
   const rng = mulberry32(seed);
   const W = GRID, H = GRID;
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
@@ -152,13 +271,13 @@ function tryGenerate(seed) {
     const lr = [];
     if (L === 0) lr.push({ x: 2, y: cy0 - 2, w: 5, h: 5, type: 'foyer' });
     if (L === -1) lr.push({ x: Math.floor(W / 2) - 4, y: Math.floor(H / 2) - 4, w: 9, h: 9, type: 'shrine' });
-    const target = L === 0 ? 16 : L === 1 ? 15 : 11;
+    const target = L === 0 ? 11 : L === 1 ? 10 : 8; // smaller houses
     for (let a = 0; a < 2500 && lr.length < target; a++) {
       const w = ri(3, 7), h = ri(3, 7), x = ri(1, W - w - 1), y = ri(1, H - h - 1);
       if (lr.some((r) => x < r.x + r.w + 2 && x + w + 2 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y)) continue;
-      lr.push({ x, y, w, h, type: pick(LEVEL_TYPES[L]) });
+      lr.push({ x, y, w, h, type: pick(T.levelTypes[L]) });
     }
-    if (lr.length < target - 4) return null;
+    if (lr.length < target - 3) return null;
     for (const r of lr) {
       r.id = rooms.length; r.L = L; rooms.push(r);
       r.cx = r.x + Math.floor(r.w / 2); r.cy = r.y + Math.floor(r.h / 2);
@@ -220,7 +339,7 @@ function tryGenerate(seed) {
       const wall = (L, [a, b]) => grid[L][b * W + a] === 0;
       if (![c(0), c(1), c(2)].every((p) => wall(lo, p)) || ![...sides(c(0)), ...sides(c(1))].every((p) => wall(lo, p))) continue;
       if (![c(0), c(1)].every((p) => wall(up, p)) || ![...sides(c(0)), ...sides(c(1))].every((p) => wall(up, p))) continue;
-      if (stairs.some((s) => Math.abs(s.c1[0] - i) + Math.abs(s.c1[1] - j) < 8)) continue;
+      if (stairs.some((s) => Math.abs(s.c1[0] - i) + Math.abs(s.c1[1] - j) < 6)) continue;
       const forbidLo = [c(0), c(1), c(2), ...sides(c(0)), ...sides(c(1))];
       const forbidUp = [c(0), c(1), ...sides(c(0)), ...sides(c(1))];
       const tl = tunnel(lo, c(-1), forbidLo), tu = tunnel(up, c(2), forbidUp);
@@ -234,6 +353,7 @@ function tryGenerate(seed) {
     return false;
   };
   for (const lo of [0, 0, -1, -1]) if (!carveStair(lo)) return null;
+  for (const lo of [0, -1, 0, -1]) carveStair(lo); // more ways up and down where they fit
 
   const map = { W, H, grid, roomId, path, rooms, stairs, levels: LEVELS };
   const foyer = rooms.find((r) => r.type === 'foyer');
@@ -320,7 +440,7 @@ function tryGenerate(seed) {
     }
     for (const r of lrooms) {
       if (r.type === 'shrine') continue;
-      const list = ROOM_PROPS[r.type];
+      const list = T.props[r.type] || ROOM_PROPS[r.type];
       let count = 0;
       for (let j = r.y; j < r.y + r.h; j++) for (let i = r.x; i < r.x + r.w; i++) {
         const k = j * W + i;
@@ -373,7 +493,7 @@ function tryGenerate(seed) {
       const dirs = DIRS.filter(([dx, dz]) => solid(i + dx, j + dz));
       if (!dirs.length) continue;
       const [dx, dz] = pick(dirs);
-      writings.push({ i, j, dx, dz, L, text: pick(WRITINGS), seed: Math.floor(rng() * 1e6) }); n++;
+      writings.push({ i, j, dx, dz, L, text: pick(T.writings), seed: Math.floor(rng() * 1e6) }); n++;
     }
     for (let n = 0; n < 18; n++) {
       const [i, j] = pick(floorCells[L]);
@@ -387,7 +507,7 @@ function tryGenerate(seed) {
   for (const r of rooms) {
     const total = rooms.filter((q) => q.type === r.type).length;
     const n = (counts[r.type] = (counts[r.type] || 0) + 1);
-    const base = ROOM_NAMES[r.type];
+    const base = T.names[r.type] || ROOM_NAMES[r.type];
     r.label = total > 1 ? (r.type === 'ward' ? `${base} ${letters[n - 1]}` : `${base} ${n}`) : base;
     const dx = r.cx - W / 2, dz = r.cy - H / 2, th = W / 7;
     const ns = dz < -th ? 'north' : dz > th ? 'south' : '';
@@ -409,12 +529,12 @@ function tryGenerate(seed) {
     }
     return null;
   };
-  const tmpl = shuffle(CLUE_TEMPLATES.slice());
+  const tmpl = shuffle(T.clues.slice());
   const cap = (x) => x[0].toUpperCase() + x.slice(1);
   talismans.forEach((t, n) => {
     const r = rooms[t.room];
     const sp = noteSpot(r.id); if (!sp) return;
-    const riddle = pick(RIDDLES[r.type] || ['somewhere nobody goes']);
+    const riddle = pick(T.riddles[r.type] || RIDDLES[r.type] || ['somewhere nobody goes']);
     const text = tmpl[n % tmpl.length].replace(/\{ITEM\}/g, t.name.toLowerCase()).replace(/\{RIDDLE\}/g, riddle)
       .replace(/\{FLOOR_CAP\}/g, cap(FLOOR_HINTS[r.L])).replace(/\{FLOOR\}/g, FLOOR_HINTS[r.L]);
     notes.push({ id: 'n' + notes.length, ...sp, text, clue: t.id, sigil: t.kind, about: `${t.name}: "${riddle}", ${FLOOR_SHORT[r.L]}`, rot: rng() * 6.28 });
@@ -438,26 +558,15 @@ function tryGenerate(seed) {
     }
     if (best) { const [dx, dz] = pick(best[2]); writings.push({ i: best[0], j: best[1], dx, dz, L: r.L, sigil: t.kind, seed: Math.floor(rng() * 1e6) }); }
   }
-  const lore = [...LORE_NOTES.slice(-3), ...shuffle(LORE_NOTES.slice(0, -3)).slice(0, 6)];
+  const lore = [...T.lore.slice(-3), ...shuffle(T.lore.slice(0, -3)).slice(0, 6)];
   for (const text of lore) { const sp = noteSpot(-1); if (sp) notes.push({ id: 'n' + notes.length, ...sp, text, rot: rng() * 6.28 }); }
 
   const hides = props.filter((p) => HIDE_TYPES.has(p.type)).map((p, n) => ({ id: 'h' + n, type: p.type, L: p.L, x: p.x, z: p.z, rot: p.rot, fx: Math.sin(p.rot), fz: Math.cos(p.rot) }));
   const fx = (foyer.cx + 0.5) * CELL, fz = (foyer.cy + 0.5) * CELL;
   const spawns = [[fx + 1, fz - 1], [fx + 1, fz + 1], [fx - 1, fz - 1], [fx - 1, fz + 1], [fx + 2.2, fz], [fx - 0.2, fz]];
   const exit = { x: foyer.x * CELL, z: (cy0 + 0.5) * CELL, L: 0 };
-  // the one blueprint of the house lies on a small table just inside the front door (no rng: the first free spot)
-  const blueprint = (() => {
-    for (const [dx, dz] of [[2.1, -2.0], [2.1, 2.0], [2.1, -3.1], [2.1, 3.1], [3.3, -2.0], [3.3, 2.0]]) {
-      const x = exit.x + dx, z = exit.z + dz;
-      if (props.some((p) => p.L === 0 && Math.abs(p.x - x) < p.hw + 0.9 && Math.abs(p.z - z) < p.hd + 0.8)) continue;
-      if (spawns.some(([sx, sz]) => edist(sx - x, sz - z) < 1.3)) continue;
-      return { x, z, L: 0 };
-    }
-    return { x: exit.x + 2.1, z: exit.z - 2.0, L: 0 };
-  })();
-
   return Object.assign(map, {
-    talismans, batteries, bells, souls, monsterSpawn, doors, props, bulbs, writings, blood, spawns, exit, hides, notes, shrine, blueprint,
+    talismans, batteries, bells, souls, monsterSpawn, doors, props, bulbs, writings, blood, spawns, exit, hides, notes, shrine,
   });
 }
 
@@ -628,7 +737,6 @@ export function staticColliders(map) {
     }
   }
   for (const p of map.props) if (p.type !== 'doll') out.push([p.x - p.hw, p.z - p.hd, p.x + p.hw, p.z + p.hd, p.L]);
-  if (map.blueprint) { const b = map.blueprint; out.push([b.x - 0.38, b.z - 0.62, b.x + 0.38, b.z + 0.62, b.L]); } // its table
   const sh = map.shrine;
   if (sh) {
     for (const pt of sh.points) out.push([pt.x - 0.45, pt.z - 0.45, pt.x + 0.45, pt.z + 0.45, sh.L]);

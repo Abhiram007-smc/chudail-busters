@@ -502,6 +502,23 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   15 s): worst frame 536 ms -> 18 ms, no errors.
 - Testing rule: the owner plays on 3021 (log `~/chudail-local-3021.log`); my tests run on 3031.
 
+## 7l. Three places, smaller houses, more stairs, a blueprint for everyone
+
+- `MAP_THEMES` in shared/map.js: **sanatorium** (Ashgrove, the original), **haveli** (Rajmahal Haveli: Deorhi,
+  Diwankhana, Hammam, Puja Ghar, Rasoi, Pustakalaya, Tehkhana...), **school** (St. Agnes': classrooms, staff room,
+  assembly hall, boiler room, science lab, library...). Internal room types are unchanged (they drive props, riddles,
+  hide types); each theme renames them and has its own `levelTypes`, `props`, `riddles`, `clues`, `lore`,
+  `writings`, `story`, `name`, `short`. `generateMap(seed, theme)`; `map.theme`. Server: lobby `mapChoice`
+  (random or a theme, `{t:'mapChoice'}`), picked in `startGame`, sent as `theme` in the start message. Client: lobby
+  "Place" row, briefing story, blueprint title, escape message, porch sign in the drag/outro (`place` param), wall and
+  floor tint per theme (world.js `TINT`).
+- **Smaller**: `GRID` 39 -> 31, rooms per floor 16/15/11 -> 11/10/8 (avg 29 rooms per map, was ~42).
+- **More stairs**: 2 per floor connection always + 2 optional attempts each (all 60 test maps got 8 stairs, was 4);
+  stairs may be 6 cells apart (was 8).
+- **Blueprint for everyone**: M works for every player anytime; the single blueprint on a table is gone
+  (`map.blueprint` removed; server `game.bp = null`, its handlers are no-ops).
+- Determinism checked: 20 seeds x 3 themes hash the same in Node and the browser; 60/60 generate for every theme.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).
