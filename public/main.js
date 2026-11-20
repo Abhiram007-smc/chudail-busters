@@ -1175,9 +1175,10 @@ function showPing(m) {
   audio.ping?.(m.kind === 'danger');
   if (m.by !== S.myId) message(`${who ? who.name : 'Someone'} pinged: ${m.label}`, m.kind === 'danger' ? 'red' : '');
 }
-// teammates' names, always visible through walls: distance under the name, ↑/↓ when they are on another floor
-const nv = new THREE.Vector3();
+// teammates' names, always visible through walls when they are anywhere in front of you: distance under the name, ↑/↓ when they are on another floor
+const nv = new THREE.Vector3(), nfwd = new THREE.Vector3();
 function updateNameTags() {
+  camera.getWorldDirection(nfwd); nfwd.y = 0; if (nfwd.lengthSq() < 1e-6) nfwd.set(0, 0, -1); nfwd.normalize();
   let layer = $('ntags'); if (!layer) { layer = document.createElement('div'); layer.id = 'ntags'; document.body.appendChild(layer); }
   const seen = new Set();
   if (S.phase === 'playing' && S.scene && S.me && !S.bpOpen) for (const r of S.players.values()) {
@@ -1186,12 +1187,27 @@ function updateNameTags() {
     if (!el) { el = r.tagEl = document.createElement('div'); el.className = 'ntag'; el.innerHTML = '<b></b><i></i>'; layer.appendChild(el); }
     seen.add(el);
     const y = (r.L || 0) * FLOOR_H + (r.cr ? 1.35 : 2.05) + (r.jy || 0);
-    nv.set(r.x, y, r.z).project(camera);
-    if (nv.z > 1 || Math.abs(nv.x) > 1.05 || Math.abs(nv.y) > 1.05) { el.style.display = 'none'; continue; }
-    const d = Math.hypot(r.x - camera.position.x, r.z - camera.position.z), other = (r.L || 0) !== S.camL;
+    const dx = r.x - camera.position.x, dz = r.z - camera.position.z, d = Math.hypot(dx, dz), other = (r.L || 0) !== S.camL;
+    // shown whenever they are anywhere in the half in front of you (up to 90° to each side, any floor, any pitch);
+    // hidden only when they are behind you. Off the screen to a side, the name sticks to that edge with an arrow.
+    const ahead = (dx * nfwd.x + dz * nfwd.z) / (d || 1);
+    if (d > 0.8 && ahead < 0) { el.style.display = 'none'; continue; }
+    const side = dx * -nfwd.z + dz * nfwd.x; // > 0: to your right
+    nv.set(r.x, y, r.z).applyMatrix4(camera.matrixWorldInverse); // camera space: -z is ahead
+    let sx, sy;
+    if (nv.z < -0.05) {
+      const q = nv.clone().applyMatrix4(camera.projectionMatrix);
+      sx = (q.x * 0.5 + 0.5) * innerWidth; sy = (-q.y * 0.5 + 0.5) * innerHeight;
+    } else { // in front of you but behind the camera's plane (looking far up or down): put them at the edge they are on
+      sx = side > 0 ? innerWidth : 0; sy = nv.y > 0 ? 0 : innerHeight;
+      if (Math.abs(side) < d * 0.5) sx = innerWidth / 2;
+    }
+    const mx = 70, myT = 100, myB = 30; // myT keeps it under the floor / room label
+    const offL = sx < mx, offR = sx > innerWidth - mx;
+    sx = Math.max(mx, Math.min(innerWidth - mx, sx)); sy = Math.max(myT, Math.min(innerHeight - myB, sy));
     el.style.display = 'block';
-    el.style.transform = `translate(${(nv.x * 0.5 + 0.5) * innerWidth}px, ${(-nv.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -100%)`;
-    const b = el.querySelector('b'); b.textContent = r.name + (r.alive ? '' : ' ✕'); b.style.color = r.color;
+    el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
+    const b = el.querySelector('b'); b.textContent = (offL ? '◀ ' : '') + r.name + (r.alive ? '' : ' ✕') + (offR ? ' ▶' : ''); b.style.color = r.color;
     el.querySelector('i').textContent = `${Math.round(d)} m${other ? ((r.L || 0) > S.camL ? ' ↑' : ' ↓') : ''}`;
     el.style.opacity = other ? 0.5 : r.alive ? 0.95 : 0.55;
   }
