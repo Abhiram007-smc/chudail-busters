@@ -534,6 +534,15 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   `me.spares`, HUD "🎒 BATTERIES ×n [R]"); **R** (action `reload`) adds 55%; a dead torch swaps one in by itself.
   Touch has 🔋 and 🔇 buttons.
 
+## 7n. Name tags across the whole front half (deployed 2026-11-21 with 7m)
+
+- `updateNameTags()` (main.js): a teammate's tag shows whenever they are in the half in front of you (flattened camera
+  forward · direction ≥ 0, i.e. up to 90° each side, any floor, any pitch); hidden only behind you. Placed with the
+  camera matrices; when off-screen it is clamped to the screen edge (margins 70 px sides, 100 px top so it stays under
+  the floor / room label, 30 px bottom) and gets ◀ / ▶. Distance and ↑/↓ under the name as before.
+- Live link after this deploy: https://eagles-perceived-practitioner-wiley.trycloudflare.com (quick tunnel, changes on
+  every restart; see public-link.txt).
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

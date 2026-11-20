@@ -33,7 +33,8 @@ The link changes each time you start, and stops working when you close the game.
 
 **Same Wi-Fi:** `npm start` and friends open the `http://192.168.x.x:3000` address shown in the lobby.
 
-Everyone picks a survivor in the lobby (8 characters), then anyone presses **Begin**.
+Everyone picks a survivor in the lobby (9 characters, including **Golu**, the big guy) and a place (or Random),
+then anyone presses **Begin**.
 
 ## The intro
 
@@ -62,8 +63,9 @@ and writing on the walls, and its own colours. Houses are compact, with several 
 
 - **Settings** (lobby or pause screen): mouse sensitivity, invert, field of view, volume, voice chat, graphics
   quality, reduce flashing, and every key can be changed.
-- **Voice chat**: you hear your friends at full volume wherever they are (from their direction). The dead
-  cannot talk to the living. Talk too loudly and she hears you. (Needs the https link or localhost for the mic.)
+- **Voice chat**: everyone hears everyone at full volume wherever they are (from their direction), alive, dead or
+  escaped. **N** mutes / unmutes your mic; Settings → "Voice chat on" turns voice off completely; with push-to-talk on,
+  hold **V**. Talk too loudly and she hears you. (Needs the https link or localhost for the mic.)
 - **Phones and tablets**: a move stick, drag to look, and buttons for everything.
 - **She is not always the same**: each game she is the Chudail, the Blind Bride, the Shadow or the Hungry One.
 - **Achievements**: 13 to earn, remembered in your browser.
@@ -138,7 +140,8 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 - **The Crawler:** wakes after the first ritual item is taken. It hangs from the ceiling, and if you walk under it, it drops and chases you on all fours. Look up.
 - **Lockers and wardrobes:** if she *sees you get in*, she drags you out. Break line of sight first.
 - **Aatma candles** (several on the map, you can carry more than one): hold E over a fallen friend for 3 seconds to bring them back.
-- Teammates' names float above them and show through walls, so you never lose each other.
+- Teammates' names float above them and show through walls whenever they are anywhere in front of you (any floor,
+  ↑/↓ arrows); off to a side, the name sticks to that screen edge with ◀ / ▶. Only someone behind you has no name.
 - Dead players watch the survivors (click to switch) until someone revives them.
 - Inside a locker your eyes adjust to the dark: you can watch through the vents. If she saw you get in she will stop and listen at the door, and she doesn't always open it.
 
@@ -172,7 +175,7 @@ To rebuild the Blender models:
 ## Credits
 
 - Survivor characters by **Quaternius** via [Poly Pizza](https://poly.pizza):
-  - "Adventurer", "Hoodie Character", "Woman", "Man", "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
+  - "Adventurer", "Hoodie Character", "Woman", "Man" (also used, widened, for Golu), "Punk", "Animated Woman" and "Hooded Adventurer": CC0 (public domain)
   - "Soldier" — Creative Commons Attribution (CC-BY), by Quaternius ([poly.pizza/m/oAArCNHjFB](https://poly.pizza/m/oAArCNHjFB))
 - Intro: street lamp model and snowy asphalt / snow textures from [Poly Haven](https://polyhaven.com) (CC0); the truck, road and mountains are built by script in Blender (`blender/build_intro.py`)
 - Intro and ending car: "Range Rover" by **IvOfficial**, Creative Commons Attribution 3.0 (CC-BY), [poly.pizza/m/8zk4o6nALW](https://poly.pizza/m/8zk4o6nALW); fitted with the game's own seats, dashboard and wipers in Blender
