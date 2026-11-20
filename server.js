@@ -581,6 +581,11 @@ wss.on('connection', (ws) => {
       } else broadcast(lobbyMsg());
       return;
     }
+    if (msg.t === 'clog') { // a player's browser reporting how loading went (to debug phones we cannot see)
+      ws.clogN = (ws.clogN || 0) + 1;
+      if (ws.clogN <= 80) console.log(`[client ${me ? me.name : 'spectator/lobby'}] ${String(msg.m || '').replace(/\s+/g, ' ').slice(0, 300)}`);
+      return;
+    }
     if (!me) return;
     // Begin: a short countdown everyone in the lobby sees (and anyone can stop), so friends still joining make it in
     if (msg.t === 'start' && game.phase === 'lobby') {

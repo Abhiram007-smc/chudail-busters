@@ -12,7 +12,8 @@ export const ACTIONS = [
 const ALT = { forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], sprint: ['ShiftRight'], sneak: ['ControlRight', 'AltLeft'] };
 
 // phones and tablets start on Low: their browsers have far less graphics memory (the page crashes otherwise)
-const PHONE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
+const PHONE = typeof navigator !== 'undefined' && (/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ||
+  (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches));
 const DEFAULTS = {
   sens: 1.2, invertY: false, volume: 0.9, voiceVolume: 1, voice: true, pushToTalk: false, quality: PHONE ? 'low' : 'high', fov: 72, calm: false,
   keys: Object.fromEntries(ACTIONS.map(([a, , k]) => [a, k])),

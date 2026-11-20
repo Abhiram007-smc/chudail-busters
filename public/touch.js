@@ -1,6 +1,7 @@
 // Phone / tablet controls: a move stick on the left, drag on the right half to look, and buttons. The buttons press
 // the player's bound keys (settings.js), so every game rule that listens for keys works unchanged.
-export const IS_TOUCH = typeof window !== 'undefined' && (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) && !matchMedia('(pointer: fine)').matches;
+export const IS_TOUCH = typeof window !== 'undefined' && ((matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) && !matchMedia('(pointer: fine)').matches ||
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))); // iPads say Macintosh
 
 export function initTouch({ keys, settings, look, onPause, active }) {
   const root = document.createElement('div'); root.id = 'touch';

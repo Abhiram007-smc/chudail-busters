@@ -121,9 +121,18 @@ const held = makeHeld(keys); // held('sprint'): honours the player's key binding
 // ---------------- networking ----------------
 let ws = null;
 const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+// report to the game server's log (we cannot see a friend's phone): load steps, errors, the device
+function clog(msg) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'clog', m: String(msg) })); } catch {} }
+addEventListener('error', (e) => clog(`ERROR ${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => clog(`PROMISE ERROR ${e.reason && (e.reason.message || e.reason)}`));
+canvas.addEventListener('webglcontextlost', () => clog('WEBGL CONTEXT LOST (graphics memory ran out?)'));
+function deviceInfo() {
+  let tex = '?'; try { const gl = renderer.getContext(); tex = gl.getParameter(gl.MAX_TEXTURE_SIZE); } catch {}
+  return `device: ${navigator.userAgent.slice(0, 140)} | screen ${screen.width}x${screen.height} dpr ${devicePixelRatio} | touch ${IS_TOUCH} | quality ${SETTINGS.quality} | maxTex ${tex} | mem ${navigator.deviceMemory || '?'}GB`;
+}
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
-  ws.onopen = () => send(S.spectator ? { t: 'join', spectator: true } : { t: 'join', name: S.name, char: S.myChar });
+  ws.onopen = () => { send(S.spectator ? { t: 'join', spectator: true } : { t: 'join', name: S.name, char: S.myChar }); clog(deviceInfo()); };
   ws.onmessage = (e) => handle(JSON.parse(e.data));
   ws.onclose = () => {
     if (S.phase !== 'menu') { leaveGame(); showScreen('menu'); $('joinBtn').disabled = false; $('joinBtn').textContent = 'Connection lost. Retry'; S.phase = 'menu'; }
@@ -347,6 +356,7 @@ document.addEventListener('pointerlockchange', () => {
   else if (S.phase === 'playing' && locked) onLocked();
 });
 function onLocked() {
+  if (S.wakePending) clog('woke up: in the game');
   {
     showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = tapText('CLICK TO RESUME');
     if (S.wakePending && S.me) { S.wakePending = false; S.me.wake = 0; wakeUpSequence(); $('eyes').className = 'open'; canvas.style.transition = 'filter 4.5s ease-out'; canvas.style.filter = 'blur(9px) brightness(0.6)'; requestAnimationFrame(() => requestAnimationFrame(() => (canvas.style.filter = ''))); setTimeout(() => { canvas.style.transition = ''; $('eyes').className = ''; }, 5200); }
@@ -418,12 +428,16 @@ function startGame(m) {
   const chars = Promise.all(m.players.map((p) => ensureChar(p.char)));
   // the intro cut scene plays only at the very start of a game (not for late joiners or hidden spectators)
   S.introAssets = null;
-  const wantIntro = m.intro && !S.spectator;
+  // phones (Low quality) skip the cut scenes: holding the movie, the car scene and the drag scene on top of the house
+  // is more memory than a phone browser allows
+  const wantIntro = m.intro && !S.spectator && SETTINGS.quality !== 'low';
+  clog(`start received: loading (intro ${wantIntro ? 'yes' : 'no'})`);
   const intro = wantIntro ? preloadIntro().then((a) => (S.introAssets = a)) : null;
-  Promise.race([Promise.all([loadModels(), fonts, chars, intro]), new Promise((r) => setTimeout(r, wantIntro ? 25000 : 9000))]).then(() => setTimeout(go, 30));
+  Promise.race([Promise.all([loadModels(), fonts, chars, intro]), new Promise((r) => setTimeout(() => r('timeout'), wantIntro ? 25000 : 9000))]).then((r) => { clog(r === 'timeout' ? 'assets: timed out, going on' : 'assets loaded'); setTimeout(go, 30); });
 }
 
 function buildGame(m) {
+  clog('building the house');
   const map = (S.map = generateMap(m.seed));
   S.mapBad = m.sig != null && mapSignature(map) !== m.sig;
   if (S.mapBad) console.error('map out of sync with the server', mapSignature(map), m.sig);
@@ -538,6 +552,7 @@ function buildGame(m) {
   if (S.introAssets && m.intro && !S.spectator) {
     // the drive, the truck... then you wake up on the floor of the house
     showScreen(''); $('hud').classList.remove('show');
+    clog('intro playing');
     S.intro = playIntro({
       renderer, assets: S.introAssets, audio, calm: FX.calm,
       players: [...m.players].sort((a, b) => a.id - b.id), meId: S.myId,
@@ -545,7 +560,8 @@ function buildGame(m) {
     });
     return;
   }
-  enterHouse(m, false);
+  clog(`house built (${renderer.info.memory.textures} textures, ${renderer.info.memory.geometries} geometries)`);
+  enterHouse(m, !!m.intro && !S.spectator); // no cut scene (phones): still wake up on the floor, the line, the objectives
 }
 
 function enterHouse(m, woke) {
