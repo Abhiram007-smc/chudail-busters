@@ -78,7 +78,7 @@ const D = () => DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 const pickRand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function lobbyMsg() {
-  return { t: 'lobby', phase: game.phase, difficulty: game.difficulty, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
+  return { t: 'lobby', phase: game.phase, difficulty: game.difficulty, countdown: game.countdown ? Math.max(0, game.countdownAt - now()) : 0, publicUrl: game.publicUrl || null, players: [...game.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, char: p.char })) };
 }
 
 function freeColor() {
@@ -132,6 +132,7 @@ function spawnPlayer(p, n) {
 }
 
 function activePlayers() { return [...game.players.values()].filter((p) => p.alive && !p.escaped); }
+function preyPlayers() { const t = now(); return activePlayers().filter((p) => !(p.graceUntil > t)); } // late joiners get a few seconds
 
 function endGame() {
   if (game.phase !== 'playing') return;
@@ -186,6 +187,7 @@ function dropItems(p) {
 }
 function killPlayer(p, dragged = false, by = null) {
   const m = game.monster;
+  console.log(`[kill] ${p.name} (${by ? 'the crawler' : dragged ? 'pulled out of a hiding place' : 'caught'})`);
   p.alive = false;
   if (p.hid) { const h = game.map.hides.find((q) => q.id === p.hid); p.x = h.x + h.fx * frontOf(h); p.z = h.z + h.fz * frontOf(h); p.hid = null; }
   dropItems(p);
@@ -242,7 +244,7 @@ function updateMonster(dt) {
   if (!m) return;
   const t = now(), d0 = D(), G = GHOST_TYPES[game.ghostType] || GHOST_TYPES.chudail;
   const d = { ...d0, sight: d0.sight * G.sight, hearing: d0.hearing * G.hearing, speed: d0.speed * G.speed };
-  const targets = activePlayers();
+  const targets = preyPlayers();
   if (m.state === 'bound') { m.speed = 0; m.lit = false; return; }
   if (t < game.startTime + 18 + INTRO_S) { m.state = 'dormant'; m.speed = 0; return; }
   if (!targets.length) return;
@@ -481,7 +483,7 @@ function updateCrawler(dt) {
   const c = game.crawler, t = now();
   if (!c) return;
   if (!D().crawler || game.progress < 1 || game.stage === 'escape') { c.state = 'gone'; return; }
-  const targets = activePlayers().filter((p) => !p.hid);
+  const targets = preyPlayers().filter((p) => !p.hid);
   if (c.state === 'gone') {
     if (t < c.t || !targets.length) return;
     const p = pickRand(targets);
@@ -571,6 +573,8 @@ wss.on('connection', (ws) => {
       console.log(`[join] ${name} (${game.players.size}/${MAX_PLAYERS})`);
       if (game.phase === 'playing') {
         spawnPlayer(me, game.players.size - 1);
+        me.graceUntil = now() + 10; // came in late: she leaves you alone for a few seconds while you find your feet
+        console.log(`[late] ${name} joined a game in progress`);
         broadcast(lobbyMsg());
         send(me, startMsg());
         broadcast({ t: 'ev', e: 'joined', id: me.id, name: me.name, color: me.color, char: me.char });
@@ -578,7 +582,20 @@ wss.on('connection', (ws) => {
       return;
     }
     if (!me) return;
-    if (msg.t === 'start' && game.phase === 'lobby') { startGame(); return; }
+    // Begin: a short countdown everyone in the lobby sees (and anyone can stop), so friends still joining make it in
+    if (msg.t === 'start' && game.phase === 'lobby') {
+      if (game.countdown) return;
+      game.countdownAt = now() + 5;
+      game.countdown = setTimeout(() => { game.countdown = null; if (game.phase === 'lobby' && game.players.size) startGame(); }, 5000);
+      console.log(`[countdown] ${me.name} pressed Begin`);
+      broadcast({ t: 'countdown', secs: 5, by: me.name });
+      return;
+    }
+    if (msg.t === 'cancelStart' && game.phase === 'lobby' && game.countdown) {
+      clearTimeout(game.countdown); game.countdown = null;
+      broadcast({ t: 'countdown', cancel: true, by: me.name });
+      return;
+    }
     if (msg.t === 'char' && CHARS.includes(msg.char)) { me.char = msg.char; broadcast(lobbyMsg()); return; }
     if (msg.t === 'difficulty' && game.phase === 'lobby' && DIFFICULTY[msg.key]) { game.difficulty = msg.key; broadcast(lobbyMsg()); return; }
     if (game.phase !== 'playing') return;
@@ -673,6 +690,7 @@ wss.on('connection', (ws) => {
       const ex = game.map.exit;
       if (!game.exitOpen || !me.alive || me.escaped || me.L !== ex.L || Math.hypot(ex.x - me.x, ex.z - me.z) > 3) return;
       me.escaped = true;
+      console.log(`[escape] ${me.name}`);
       broadcast({ t: 'ev', e: 'escaped', id: me.id });
       if (game.bp && game.bp.holder === me.id) { Object.assign(game.bp, { ...game.map.blueprint, holder: null, onTable: true }); broadcast(bpMsg({ by: me.id, why: 'return' })); }
       checkEnd();

@@ -471,6 +471,21 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   right 55% to look, buttons E / jump / crouch (toggle) / torch / bell / ping / map / talk (hold) / sprint (toggle)
   that press the player's bound keys, a pause button. `body.touch` shrinks the HUD.
 
+## 7j. Fixes after a real session: start countdown, late joiners, phone memory (LOCAL ONLY until the owner says)
+
+- What happened (server log): a hidden spectator joined first, one player pressed Begin alone, the friend joined
+  after the start (late joiner, no shared loading screen, the house already awake), and a phone crashed.
+- **Start countdown**: `start` now begins a 5 s countdown (`countdown` message, `lobbyMsg().countdown` = seconds left
+  for people joining meanwhile); anyone can send `cancelStart` ("WAIT!" button). Everyone in the lobby goes in together.
+- **Late joiners** get `graceUntil` = 10 s: `preyPlayers()` (used by her and the crawler) skips them meanwhile.
+- **Server log** now has `[countdown]`, `[late]`, `[kill] name (caught / pulled out of a hiding place / the crawler)`,
+  `[escape] name`, so "he suddenly became a spectator" can be read off the log next time.
+- "Watch as hidden spectator" asks for confirmation.
+- **Phones**: quality defaults to Low on coarse-pointer devices (pixel ratio 0.7, no shadows), Low builds 1 stone statue
+  per floor and 2 wall faces (was 5 + 5), and wall writings share one texture per phrase everywhere (was one 1024x384
+  texture each, ~40). Emulated phone: 32 textures (desktop High: 93), no errors. Portrait shows "turn your phone
+  sideways". Not tested on a real phone.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

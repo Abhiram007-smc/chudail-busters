@@ -149,6 +149,13 @@
   body.touch #floorTag { top: 8px; font-size: 11px; }
   body.touch #objpop { pointer-events: auto; font-size: 12px; z-index: 10; }
   body.touch #prompt { top: 40%; font-size: 13px; }
+  #rotate { display: none; }
+  @media (orientation: portrait) { body.touch.ingame #rotate { display: flex; position: fixed; inset: 0; z-index: 70; background: #000; color: #e6dcc2; align-items: center; justify-content: center; text-align: center; font-size: 20px; padding: 30px; } }
+  #countdown { position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,.6); text-align: center; }
+  #countdown.show { display: flex; }
+  #countdown .cn { font-family: 'Creepster', serif; font-size: clamp(42px, 9vw, 90px); letter-spacing: .12em; color: #e6dcc2; text-shadow: 0 0 30px rgba(170,0,0,.8); }
+  #countdown .cb { color: #b9ae96; margin: 10px 0 18px; }
+  #countdown button { background: #3a0d0a; color: #ffd27a; border: 1px solid #8a3a2a; padding: 10px 18px; font: inherit; cursor: pointer; letter-spacing: .1em; }
   #ntags { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
   .ntag { position: absolute; left: 0; top: 0; text-align: center; white-space: nowrap; text-shadow: 0 0 4px #000, 0 1px 3px #000; }
   .ntag b { display: block; font: bold 14px 'Courier Prime', monospace; letter-spacing: .04em; }
@@ -287,7 +294,7 @@
     <div class="share" id="share">Loading invite link…</div>
     <button class="setbtn" id="lobbySettings">⚙ Settings: mouse, sound, voice chat, graphics, keys</button>
     <button id="startBtn">Begin</button>
-    <div class="warn">Anyone can press Begin. Late joiners spawn in the foyer.</div>
+    <div class="warn">Begin starts a 5 second countdown for everyone in the lobby (anyone can stop it). Late joiners spawn in the foyer.</div>
   </div>
 </div>
 
@@ -321,6 +328,7 @@
 <div id="redflash"></div>
 <div id="note"><div class="paper"><div class="text" id="noteText"></div><img id="noteSigil" alt="" /><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
 
+<div id="rotate">📱↻<br><br>Turn your phone sideways to play</div>
 <div id="wakesub"></div>
 <div id="objpop"><div class="inner"></div><div class="hint">press <kbd>ENTER</kbd> (or tap) to close</div></div>
 <div id="resume" class="screen"><div id="brief"></div><h2>CLICK TO RESUME</h2><p>It won't wait for you.</p><button class="setbtn" id="pauseSettings">⚙ Settings</button></div>

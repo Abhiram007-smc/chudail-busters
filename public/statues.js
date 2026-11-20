@@ -11,7 +11,9 @@ import { createMonster, getModel } from './entities.js';
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-export function buildStatues({ map, world, seed }) {
+export function buildStatues({ map, world, seed, lite = false }) {
+  // lite (Low quality / phones): far fewer of them; each stone Chudail is a whole copy of her model
+  const N_ROOM = lite ? 1 : 2, N_HALL = lite ? 0 : 3, N_FACE = lite ? 2 : 5;
   const rng = mulberry32((seed ^ 0x5eed) >>> 0);
   const W = map.W, H = map.H;
   const typeAt = (L, i, j) => (i >= 0 && j >= 0 && i < W && j < H ? map.grid[L][j * W + i] : 0);
@@ -54,7 +56,7 @@ export function buildStatues({ map, world, seed }) {
   for (const L of LEVELS) {
     const rooms = map.rooms.filter((r) => r.L === L && r.type !== 'shrine' && r.w >= 2 && r.h >= 2);
     let placed = 0;
-    for (let tries = 0; tries < 60 && placed < 2 && rooms.length; tries++) {
+    for (let tries = 0; tries < 60 && placed < N_ROOM && rooms.length; tries++) {
       const r = rooms[Math.floor(rng() * rooms.length)];
       if (list.some((s) => s.room === r.id)) continue;
       const ci = rng() < 0.5 ? r.x : r.x + r.w - 1, cj = rng() < 0.5 ? r.y : r.y + r.h - 1;
@@ -83,7 +85,7 @@ export function buildStatues({ map, world, seed }) {
       if (ns !== ew) cells.push([i, j, ns]);
     }
     let placed = 0;
-    for (let tries = 0; tries < 500 && placed < 3 && cells.length; tries++) {
+    for (let tries = 0; tries < 500 && placed < N_HALL && cells.length; tries++) {
       const [i, j, ns] = cells[Math.floor(rng() * cells.length)];
       if (list.some((o) => o.L === L && Math.hypot(o.x / CELL - (i + 0.5), o.z / CELL - (j + 0.5)) < 6)) continue;
       const sides = (ns ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1]]).filter(([a, b]) => typeAt(L, i + a, j + b) === 0 && !writ.has(`${L},${i},${j},${a},${b}`));
@@ -109,7 +111,7 @@ export function buildStatues({ map, world, seed }) {
       const cells = [];
       for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) if (typeAt(L, i, j) === 2 && !nearDoor(L, i, j)) cells.push([i, j]);
       let placed = 0;
-      for (let tries = 0; tries < 400 && placed < 5 && cells.length; tries++) {
+      for (let tries = 0; tries < 400 && placed < N_FACE && cells.length; tries++) {
         const [i, j] = cells[Math.floor(rng() * cells.length)];
         if (list.some((s) => s.L === L && s.kind === 'face' && Math.hypot(s.i - i, s.j - j) < 5)) continue;
         const walls = N4.filter(([a, b]) => typeAt(L, i + a, j + b) === 0 && !writ.has(`${L},${i},${j},${a},${b}`));

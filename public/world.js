@@ -402,13 +402,17 @@ export function buildWorld(scene, map) {
   }
   world.bloodMats = bloodMats;
   const sigilMats = new Map();
+  const writingMats = new Map();
   for (const w of map.writings) {
     let m;
     if (w.sigil) { // her sign: small, low, easy to walk past
       if (!sigilMats.has(w.sigil)) sigilMats.set(w.sigil, decalMat(TX.sigilCanvas(w.sigil, 'wall')));
       const sz = 0.42 + (w.seed % 7) * 0.03;
       m = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), sigilMats.get(w.sigil));
-    } else m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.975), decalMat(TX.writingCanvas(w.text)));
+    } else { // one texture per phrase (the same few phrases repeat all over the house: a phone runs out of memory otherwise)
+      if (!writingMats.has(w.text)) writingMats.set(w.text, decalMat(TX.writingCanvas(w.text)));
+      m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.975), writingMats.get(w.text));
+    }
     const along = w.sigil ? (((w.seed >> 3) % 100) / 100 - 0.5) * 1.6 : 0; // slide along the wall
     const cx = (w.i + 0.5) * CELL + w.dx * (CELL / 2 - 0.015) + (w.dz ? along : 0), cz = (w.j + 0.5) * CELL + w.dz * (CELL / 2 - 0.015) + (w.dx ? along : 0);
     m.position.set(cx, w.sigil ? 0.55 + ((w.seed % 100) / 100) * 0.9 : 1.55 + ((w.seed % 100) / 100 - 0.5) * 0.4, cz);

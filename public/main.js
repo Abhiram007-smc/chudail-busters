@@ -136,12 +136,14 @@ function handle(m) {
     case 'full': $('joinBtn').disabled = false; $('joinBtn').textContent = 'Asylum full (6/6). Retry'; ws.close(); S.phase = 'menu'; break;
     case 'lobby':
       S.lobby = m.players; if (m.difficulty) S.difficulty = m.difficulty; renderLobby();
+      if (m.countdown > 0 && !S.countdownTimer && S.phase === 'lobby') showCountdown(m.countdown);
       if (m.publicUrl && m.publicUrl !== S.publicUrl) { S.publicUrl = m.publicUrl; loadShare(); }
       if (m.phase === 'lobby') {
         if (S.phase !== 'lobby') { leaveGame(); S.phase = 'lobby'; showScreen('lobby'); }
       }
       break;
-    case 'start': startGame(m); break;
+    case 'countdown': showCountdown(m.cancel ? 0 : m.secs, m.by, m.cancel); break;
+    case 'start': showCountdown(0); startGame(m); break;
     case 'snap': applySnap(m); break;
     case 'rtc': S.voice?.onSignal(m.from, m.data); break;
     case 'ev': onEvent(m); if (S.run) trackAch(S.run, m).forEach(achToast); break;
@@ -215,6 +217,7 @@ $('joinBtn').onclick = () => {
   connect(); loadShare();
 };
 $('specBtn').onclick = () => {
+  if (!confirm('Watch as a hidden spectator? You will NOT be a player: you only watch, invisible. (To play, press Enter the asylum.)')) return;
   S.spectator = true; S.name = 'Spectator';
   audio.init(); if (!audio.samples) audio.loadSample('scream', '/sounds/scream.mp3'); audio.loadSteps();
   $('specBtn').disabled = true; $('joinBtn').disabled = true;
@@ -222,6 +225,23 @@ $('specBtn').onclick = () => {
 };
 $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
 $('startBtn').onclick = () => { audio.init(); send({ t: 'start' }); };
+// Begin starts a 5 s countdown everyone sees; anyone can stop it (friends still coming in)
+function showCountdown(secs, by, cancelled) {
+  let el = $('countdown');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'countdown';
+    el.innerHTML = '<div class="cn"></div><div class="cb"></div><button>WAIT! not everyone is here</button>';
+    el.querySelector('button').onclick = () => send({ t: 'cancelStart' });
+    document.body.appendChild(el);
+  }
+  clearInterval(S.countdownTimer); S.countdownTimer = null;
+  if (!secs) { el.classList.remove('show'); if (cancelled) message(`${by} stopped the countdown.`); return; }
+  audio.init();
+  const end = performance.now() + secs * 1000;
+  el.querySelector('.cb').textContent = by ? `${by} pressed Begin. Everyone in the lobby goes in together.` : 'The game is about to start.';
+  const tick = () => { const left = Math.max(0, Math.ceil((end - performance.now()) / 1000)); el.querySelector('.cn').textContent = left ? `STARTING IN ${left}` : 'HERE WE GO'; };
+  tick(); el.classList.add('show'); S.countdownTimer = setInterval(tick, 200);
+}
 // settings (public/settings.js): applied now and whenever they change
 function applySettings(k) {
   S.sens = SETTINGS.sens; FX.calm = !!SETTINGS.calm; audio.setVolume(SETTINGS.volume);
@@ -412,8 +432,9 @@ function buildGame(m) {
   scene.fog = new THREE.FogExp2(0x000000, 0.072);
   scene.add(camera);
   S.world = buildWorld(scene, map);
-  try { S.statues = buildStatues({ map, world: S.world, seed: m.seed }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
+  try { S.statues = buildStatues({ map, world: S.world, seed: m.seed, lite: SETTINGS.quality === 'low' }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
   buildBlueprint(map, m.bp);
+  document.body.classList.add('ingame');
   S.ghostType = GHOST_TYPES[m.ghostType] ? m.ghostType : 'chudail';
   S.voice?.stop(); S.voice = null;
   if (!S.spectator && SETTINGS.voice) {
@@ -896,6 +917,7 @@ function playEnding() {
 }
 
 function onEnd(m) {
+  document.body.classList.remove('ingame');
   closeBlueprint(); S.touchActive = false; TC?.show(false);
   setTimeout(() => { S.voice?.stop(); S.voice = null; }, 15000); // keep talking over the end screen a little
   if (S.intro && S.intro.outro) { S.pendingEnd = m; return; } // let the drive away finish first
