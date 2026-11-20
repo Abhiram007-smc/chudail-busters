@@ -501,7 +501,7 @@ function buildGame(m) {
   S.composer.addPass(new OutputPass());
   S.post = new ShaderPass(HorrorShader); S.composer.addPass(S.post);
 
-  (S.pings || []).forEach((p) => p.el.remove()); S.pings = [];
+  (S.pings || []).forEach((p) => p.el.remove()); S.pings = []; $('ntags')?.replaceChildren();
   S.fear = 0; S.red = 0; S.black = 1; S.shake = 0; S.timers = []; S.anims = []; S.spectating = null; S.jumpscare = false; S.ghostState = null;
   S.nextScare = performance.now() / 1000 + rnd(30, 45);
   S.flickUntil = 0; S.lightsOutUntil = 0; S.torchCtl = null;
@@ -860,6 +860,7 @@ function onEvent(m) {
     case 'left': {
       S.voice?.drop(m.id);
       const r = S.players.get(m.id);
+      r?.tagEl?.remove();
       if (r) { S.scene.remove(r.avatar); S.players.delete(m.id); }
       if (S.spectating === m.id) nextSpectate();
       message(`${m.name} left`);
@@ -1087,6 +1088,29 @@ function showPing(m) {
   audio.ping?.(m.kind === 'danger');
   if (m.by !== S.myId) message(`${who ? who.name : 'Someone'} pinged: ${m.label}`, m.kind === 'danger' ? 'red' : '');
 }
+// teammates' names, always visible through walls: distance under the name, ↑/↓ when they are on another floor
+const nv = new THREE.Vector3();
+function updateNameTags() {
+  let layer = $('ntags'); if (!layer) { layer = document.createElement('div'); layer.id = 'ntags'; document.body.appendChild(layer); }
+  const seen = new Set();
+  if (S.phase === 'playing' && S.scene && S.me && !S.bpOpen) for (const r of S.players.values()) {
+    if (r.escaped || S.spectating === r.id) continue;
+    let el = r.tagEl;
+    if (!el) { el = r.tagEl = document.createElement('div'); el.className = 'ntag'; el.innerHTML = '<b></b><i></i>'; layer.appendChild(el); }
+    seen.add(el);
+    const y = (r.L || 0) * FLOOR_H + (r.cr ? 1.35 : 2.05) + (r.jy || 0);
+    nv.set(r.x, y, r.z).project(camera);
+    if (nv.z > 1 || Math.abs(nv.x) > 1.05 || Math.abs(nv.y) > 1.05) { el.style.display = 'none'; continue; }
+    const d = Math.hypot(r.x - camera.position.x, r.z - camera.position.z), other = (r.L || 0) !== S.camL;
+    el.style.display = 'block';
+    el.style.transform = `translate(${(nv.x * 0.5 + 0.5) * innerWidth}px, ${(-nv.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -100%)`;
+    const b = el.querySelector('b'); b.textContent = r.name + (r.alive ? '' : ' ✕'); b.style.color = r.color;
+    el.querySelector('i').textContent = `${Math.round(d)} m${other ? ((r.L || 0) > S.camL ? ' ↑' : ' ↓') : ''}`;
+    el.style.opacity = other ? 0.5 : r.alive ? 0.95 : 0.55;
+  }
+  for (const el of [...layer.children]) if (!seen.has(el)) el.style.display = 'none';
+}
+
 const pv = new THREE.Vector3();
 function updatePings() {
   if (!S.pings || !S.pings.length) return;
@@ -1641,6 +1665,7 @@ function updateRemotes(dt) {
     // label always faces camera (sprite), fade with distance
     const d = Math.hypot(r.x - camera.position.x, r.z - camera.position.z);
     a.userData.label.material.opacity = clamp(1 - (d - 4) / 10, 0.15, 0.85);
+    a.userData.label.visible = false; // the screen name tags (updateNameTags) show names through walls instead
   }
 }
 
@@ -2006,6 +2031,7 @@ function frame(now) {
   updateCrawler(dt, t);
   S.statues?.update(dt, camera, S.camL, audio);
   updatePings();
+  updateNameTags();
   S.voice?.update(dt, { me: S.me, players: S.players, held, camL: S.camL });
   updateLights(dt, t);
   S.world.update(dt, t);

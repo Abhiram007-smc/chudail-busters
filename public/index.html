@@ -149,6 +149,11 @@
   body.touch #floorTag { top: 8px; font-size: 11px; }
   body.touch #objpop { pointer-events: auto; font-size: 12px; z-index: 10; }
   body.touch #prompt { top: 40%; font-size: 13px; }
+  #ntags { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .ntag { position: absolute; left: 0; top: 0; text-align: center; white-space: nowrap; text-shadow: 0 0 4px #000, 0 1px 3px #000; }
+  .ntag b { display: block; font: bold 14px 'Courier Prime', monospace; letter-spacing: .04em; }
+  .ntag i { display: block; font: normal 10px 'Courier Prime', monospace; color: #b9ae96; font-style: normal; }
+  body.touch .ntag b { font-size: 11px; }
   #pings { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
   .ping { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; font: bold 12px 'Courier Prime', monospace; color: #f2ead4; text-shadow: 0 0 4px #000, 0 1px 2px #000; white-space: nowrap; }
   .ping b { font-size: 22px; line-height: 1; animation: pingpop .5s ease-out; }
