@@ -486,6 +486,22 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   texture each, ~40). Emulated phone: 32 textures (desktop High: 93), no errors. Portrait shows "turn your phone
   sideways". Not tested on a real phone.
 
+## 7k. Mirrors, room name on top, voice at full volume, no more mid-game freezes
+
+- **Mirrors** (`public/mirrors.js`, not built on Low): 2 per floor, bathrooms first then corridor walls (deterministic
+  order: never sort by a random comparator), three.js `Reflector`, rendered only within 11 m on your floor. Their
+  reflection cameras also see layer 1 (`MIRROR_LAYER`). The scare (`updateMirrorScare` in main.js): looking into a
+  mirror from 0.6-4.5 m, at most every 20 s (each mirror every 50 s), 45% chance: `S.ghost` goes to layer 1 behind you
+  (only the mirror shows her), creeps from ~2.4 m to 0.85 m in 2.4 s, lit by `S.mirrorLight` (created once, only
+  dimmed); turn away and she is gone (whisper); keep staring and the glass cracks (stinger, face flash).
+- **Top label** shows floor and room: `GROUND FLOOR · WARD 3` / `CORRIDOR` / `STAIRS` (map.roomId).
+- **Voice chat at full volume** at any distance and on any floor (panner refDistance 1000 keeps only the direction);
+  the dead still cannot talk to the living.
+- **Freezes fixed**: `warmUp()` now reveals every hidden object (far statues, faces, mirrors, other floors) before
+  `renderer.compile`, and uploads every texture with `renderer.initTexture`. Chaos test (scares + jumping between floors,
+  15 s): worst frame 536 ms -> 18 ms, no errors.
+- Testing rule: the owner plays on 3021 (log `~/chudail-local-3021.log`); my tests run on 3031.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

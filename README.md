@@ -55,7 +55,7 @@ out; she watches you go from the doorway.
 
 - **Settings** (lobby or pause screen): mouse sensitivity, invert, field of view, volume, voice chat, graphics
   quality, reduce flashing, and every key can be changed.
-- **Proximity voice chat**: you hear your friends only when they are near you, from where they are. The dead
+- **Voice chat**: you hear your friends at full volume wherever they are (from their direction). The dead
   cannot talk to the living. Talk too loudly and she hears you. (Needs the https link or localhost for the mic.)
 - **Phones and tablets**: a move stick, drag to look, and buttons for everything.
 - **She is not always the same**: each game she is the Chudail, the Blind Bride, the Shadow or the Hungry One.
@@ -63,7 +63,7 @@ out; she watches you go from the doorway.
 
 ## Things that watch you
 
-Screaming plaster faces are set into the corridor walls and stone statues of her stand in the rooms and halls.
+Mirrors hang in the bathrooms and halls. Look into one long enough. Screaming plaster faces are set into the corridor walls and stone statues of her stand in the rooms and halls.
 They never move while you look at them. Look away.
 
 ## Finding your way

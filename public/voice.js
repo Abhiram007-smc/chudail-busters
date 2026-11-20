@@ -1,6 +1,6 @@
-// Proximity voice chat. Every player sends their microphone straight to every other player (WebRTC, the game
-// server only passes the connection messages along: {t:'rtc', to, data}). Each voice plays through a 3D panner
-// at that player's position, so you hear friends near you, from where they are; through a floor they are faint.
+// Voice chat. Every player sends their microphone straight to every other player (WebRTC, the game server only
+// passes the connection messages along: {t:'rtc', to, data}). Every friend is heard at full volume wherever they are
+// (any distance, any floor); a 3D panner keeps the direction they are in.
 // The dead cannot talk to the living (but hear everyone). Talking loudly is noise SHE can hear ({t:'noise'}).
 // Needs a secure page (https or localhost) for the microphone.
 const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
@@ -91,7 +91,9 @@ export function createVoice({ audio, send, settings, myId }) {
       const theyDead = !r.alive || r.escaped;
       let g = settings.voice ? settings.voiceVolume : 0;
       if (theyDead && !iAmDead) g = 0; // the dead cannot talk to the living
-      if (iAmDead) { p.panner.refDistance = 100; } else { p.panner.refDistance = 2; if (r.L !== camL) g *= 0.22; }
+      // friends are always heard at full volume, however far away or on whatever floor (owner's call); the panner only
+      // keeps the direction they are in
+      p.panner.refDistance = 1000;
       p.gain.gain.setTargetAtTime(g, audio.ctx.currentTime, 0.08);
       audio.setPos(p.panner, r.x, (r.L || 0) * 3 + 1.6, r.z);
     }

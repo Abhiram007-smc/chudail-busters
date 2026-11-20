@@ -15,6 +15,7 @@ import { createVoice } from './voice.js';
 import { IS_TOUCH, initTouch } from './touch.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
 import { buildStatues } from './statues.js';
+import { buildMirrors, MIRROR_LAYER } from './mirrors.js';
 import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = (id) => document.getElementById(id);
@@ -447,6 +448,9 @@ function buildGame(m) {
   scene.add(camera);
   S.world = buildWorld(scene, map);
   try { S.statues = buildStatues({ map, world: S.world, seed: m.seed, lite: SETTINGS.quality === 'low' }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
+  // a cold light that only matters in the mirrors: it lights her up behind you (made once; never toggled, only dimmed)
+  S.mirrorLight = new THREE.PointLight(0xa8b8ff, 0, 4.5, 1.4); scene.add(S.mirrorLight);
+  try { S.mirrors = SETTINGS.quality !== 'low' ? buildMirrors({ map, world: S.world, seed: m.seed, avoid: S.statues?.list || [] }) : null; } catch (e) { console.warn('mirrors failed', e); S.mirrors = null; }
   buildBlueprint(map, m.bp);
   document.body.classList.add('ingame');
   S.ghostType = GHOST_TYPES[m.ghostType] ? m.ghostType : 'chudail';
@@ -590,7 +594,15 @@ function warmUp(scene) {
   flashlight.position.copy(camera.position); flashTarget.position.copy(camera.position).addScaledVector(f, 5);
   flashlight.intensity = 50;
   S.crawler.userData.update(0.016, 'crawl', 2, 0);
+  // compile EVERYTHING now, not only what is in view: far statues, wall faces, mirrors, other floors would otherwise
+  // be compiled the first time you see them (a half-second freeze in the middle of the game)
+  const reveal = []; scene.traverse((o) => { if (!o.visible && !o.isLight) { reveal.push(o); o.visible = true; } });
   renderer.compile(scene, camera);
+  // and upload every texture now too (a floor you walk onto later would otherwise hitch while its textures upload)
+  const texs = new Set();
+  scene.traverse((o) => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) for (const k of ['map', 'normalMap', 'roughnessMap', 'emissiveMap', 'alphaMap', 'aoMap', 'bumpMap']) if (m[k] && m[k].isTexture) texs.add(m[k]); });
+  for (const t of texs) { try { renderer.initTexture(t); } catch {} }
+  reveal.forEach((o) => (o.visible = false));
   S.composer.render(0.016);
   things.forEach((o, k) => { o.visible = saved[k][0]; o.position.copy(saved[k][1]); });
   if (!scareCv) scareCv = TX.jumpscareCanvas();
@@ -1084,7 +1096,25 @@ function showGhost(x, z, until, kind) {
   g.visible = true;
   S.ghostState = { until, seen: false, kind, lookT: 0 };
 }
-function hideGhost() { S.ghost.visible = false; S.ghost.userData.setCrawl?.(0, 1, WALL_H, true); S.ghostState = null; }
+function hideGhost() {
+  if (S.ghostState?.kind === 'mirror') { S.ghost.traverse((o) => o.layers.set(0)); if (S.mirrorLight) S.mirrorLight.intensity = 0; }
+  S.ghost.visible = false; S.ghost.userData.setCrawl?.(0, 1, WALL_H, true); S.ghostState = null;
+}
+
+// ---------------- mirrors: she is behind you, but only in the reflection ----------------
+function updateMirrorScare(t) {
+  if (!S.mirrors || S.ghostState || !S.me?.alive || S.me.hidden || S.spectator || S.intro) return;
+  const mir = S.mirrors.lookingInto(camera, S.camL);
+  if (!mir || t < mir.next || t < (S.nextMirror || 0)) return;
+  mir.next = t + 50; S.nextMirror = t + 20;
+  if (Math.random() > 0.55) return; // not every time: you never know
+  const f = camForward(); let back = 2.4;
+  for (; back > 1; back -= 0.4) if (!isWall(S.map, S.me.L, Math.floor((S.me.x - f.x * back) / CELL), Math.floor((S.me.z - f.z * back) / CELL))) break;
+  showGhost(S.me.x - f.x * back, S.me.z - f.z * back, t + 4, 'mirror');
+  S.ghost.traverse((o) => o.layers.set(MIRROR_LAYER)); // only the mirror can see her
+  Object.assign(S.ghostState, { mirror: mir, t0: t, back });
+  audio.breath(0.25); later(0.6, () => audio.whisper(0, 0.18, 1.6));
+}
 
 // ---------------- achievements ----------------
 function achToast(a) {
@@ -1441,7 +1471,23 @@ function updateScares(dt, t) {
   }
   const gs = S.ghostState;
   if (gs) {
-    if (gs.kind === 'ceiling') {
+    if (gs.kind === 'mirror') { // creeping up behind you in the glass
+      const k = Math.min(1, (t - gs.t0) / 2.4), f = camForward(), d = gs.back + (0.85 - gs.back) * k;
+      S.ghost.position.set(S.me.x - f.x * d, S.me.L * FLOOR_H, S.me.z - f.z * d);
+      S.ghost.rotation.y = Math.atan2(-(camera.position.x - S.ghost.position.x), -(camera.position.z - S.ghost.position.z));
+      S.ghost.userData.reveal = k > 0.5 ? 1 : 0;
+      S.ghost.userData.update(dt, 0, 'stare', t);
+      if (S.mirrorLight) { S.mirrorLight.position.set(S.ghost.position.x + f.x * 0.6, S.ghost.position.y + 2.0, S.ghost.position.z + f.z * 0.6); S.mirrorLight.intensity = 3.5 * Math.min(1, k * 3); }
+      const stillLooking = S.mirrors.lookingInto(camera, S.camL) === gs.mirror;
+      if (!stillLooking) { // you turned around (or walked off): nothing there
+        audio.whisper(0, 0.3, 1.2); hideGhost(); return;
+      }
+      if (k >= 1) { // you kept staring: the glass breaks
+        audio.stinger(1); audio.screech(S.ghost.position.x, S.ghost.position.z, 0.8); audio.glass?.(gs.mirror.x, gs.mirror.z);
+        S.shake = 1.2; S.red = 0.8; fxFlash('#fff', 0.7, 160); fxGlitch(140); later(0.1, () => fxFace(60, 0.7));
+        S.mirrors.crack(gs.mirror); hideGhost(); return;
+      }
+    } else if (gs.kind === 'ceiling') {
       const k = Math.min(1, (t - gs.t0) / 1.2);
       S.ghost.position.set(gs.from.x + (gs.to.x - gs.from.x) * k, heightAt(S.map, S.me.L, S.ghost.position.x, S.ghost.position.z), gs.from.z + (gs.to.z - gs.from.z) * k);
       S.ghost.rotation.y = Math.atan2(-(gs.to.x - gs.from.x), -(gs.to.z - gs.from.z));
@@ -1958,7 +2004,14 @@ function updateInteract() {
 let hudT = 0, hudKey = '', teamKey = '';
 function updateHUD(dt) {
   const me = S.me;
-  const fl = (LEVEL_NAMES[S.camL] || '').toUpperCase();
+  // where you are: the floor and the room (or corridor / stairs)
+  let where = '';
+  if (S.map) {
+    const W = S.map.W, i = Math.floor(camera.position.x / CELL), j = Math.floor(camera.position.z / CELL);
+    const t = S.map.grid[S.camL]?.[j * W + i], rid = S.map.roomId[S.camL]?.[j * W + i];
+    where = t === 3 || t === 4 ? 'STAIRS' : rid >= 0 && S.map.rooms[rid] ? S.map.rooms[rid].label : t === 2 ? 'CORRIDOR' : '';
+  }
+  const fl = (LEVEL_NAMES[S.camL] || '').toUpperCase() + (where ? `  ·  ${where}` : '');
   if ($('floorTag').textContent !== fl) $('floorTag').textContent = fl;
   const hk = `${Math.round(me.battery)}|${Math.round(me.stamina)}|${me.exhausted}|${me.bells}|${me.revives}`;
   if (hk !== hudKey) {
@@ -2069,6 +2122,8 @@ function frame(now) {
   updateCrawler(dt, t);
   S.statues?.update(dt, camera, S.camL, audio);
   updatePings();
+  S.mirrors?.update(camera, S.camL);
+  updateMirrorScare(t);
   updateNameTags();
   S.voice?.update(dt, { me: S.me, players: S.players, held, camL: S.camL });
   updateLights(dt, t);
