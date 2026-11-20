@@ -12,6 +12,7 @@ import * as TX from './textures.js';
 import { SETTINGS, is, makeHeld, initSettings, openSettings, closeSettings, settingsOpen } from './settings.js';
 import { newRun, track as trackAch, runSummary } from './achievements.js';
 import { createVoice } from './voice.js';
+import { IS_TOUCH, initTouch } from './touch.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
 import { buildStatues } from './statues.js';
 import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -295,23 +296,42 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== canvas || !S.me || (!S.me.alive && !S.spectator) || S.jumpscare) return;
-  const k = 0.0021 * S.sens;
-  S.me.yaw -= e.movementX * k;
-  S.me.pitch = clamp(S.me.pitch - e.movementY * k * (SETTINGS.invertY ? -1 : 1), S.spectator ? -1.55 : -1.45, 1.45);
+  applyLook(e.movementX, e.movementY, 0.0021);
+});
+function applyLook(dx, dy, scale) {
+  const k = scale * S.sens;
+  S.me.yaw -= dx * k;
+  S.me.pitch = clamp(S.me.pitch - dy * k * (SETTINGS.invertY ? -1 : 1), S.spectator ? -1.55 : -1.45, 1.45);
   if (S.me.hidden) { const bed = S.world.hides.get(S.me.hidden)?.type === 'bed'; S.me.yaw = S.me.hideYaw + clamp(angDiff(S.me.yaw, S.me.hideYaw), bed ? -0.8 : -0.55, bed ? 0.8 : 0.55); S.me.pitch = clamp(S.me.pitch, bed ? -0.1 : -0.35, bed ? 0.12 : 0.3); }
-});
+}
+// "in play": the mouse is captured, or on a phone the player tapped in
+const inPlay = () => document.pointerLockElement === canvas || (IS_TOUCH && S.touchActive);
+const tapText = (t) => (IS_TOUCH ? t.replace('CLICK', 'TAP') : t);
+if (IS_TOUCH) document.body.classList.add('touch');
+const TC = IS_TOUCH ? initTouch({
+  keys, settings: SETTINGS, active: () => S.touchActive,
+  look: (dx, dy) => { if (S.phase === 'playing' && S.me && (S.me.alive || S.spectator) && !S.jumpscare) applyLook(dx, dy, 0.0045); },
+  onPause: () => { S.touchActive = false; TC.show(false); if (S.phase === 'playing') showScreen('resume'); },
+}) : null;
 addEventListener('mousedown', () => {
-  if (S.phase === 'playing' && document.pointerLockElement === canvas && S.spectating !== null) nextSpectate();
+  if (S.phase === 'playing' && inPlay() && S.spectating !== null) nextSpectate();
 });
-$('resume').onclick = () => { if (settingsOpen()) return; audio.init(); canvas.requestPointerLock(); };
+$('resume').onclick = () => {
+  if (settingsOpen()) return; audio.init();
+  if (S.phase !== 'playing') return;
+  if (IS_TOUCH) { S.touchActive = true; TC.show(true); onLocked(); } else canvas.requestPointerLock();
+};
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;
   if (S.phase === 'playing' && !locked) showScreen('resume');
-  else if (S.phase === 'playing' && locked) {
-    showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = 'CLICK TO RESUME';
+  else if (S.phase === 'playing' && locked) onLocked();
+});
+function onLocked() {
+  {
+    showScreen(''); $('brief').style.display = 'none'; $('resume').querySelector('h2').textContent = tapText('CLICK TO RESUME');
     if (S.wakePending && S.me) { S.wakePending = false; S.me.wake = 0; wakeUpSequence(); $('eyes').className = 'open'; canvas.style.transition = 'filter 4.5s ease-out'; canvas.style.filter = 'blur(9px) brightness(0.6)'; requestAnimationFrame(() => requestAnimationFrame(() => (canvas.style.filter = ''))); setTimeout(() => { canvas.style.transition = ''; $('eyes').className = ''; }, 5200); }
   }
-});
+}
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -514,7 +534,7 @@ function enterHouse(m, woke) {
   // the door shuts behind you
   fxFlash('#7a0000', woke ? 0.4 : 0.8, 700); if (!woke) { audio.stinger(0.6); audio.bang(S.me ? S.me.x : 0, S.me ? S.me.z : 0, 1); }
   showScreen('resume');
-  $('resume').querySelector('h2').textContent = woke && !S.spectator ? 'CLICK TO WAKE UP' : 'CLICK TO ENTER';
+  $('resume').querySelector('h2').textContent = tapText(woke && !S.spectator ? 'CLICK TO WAKE UP' : 'CLICK TO ENTER');
   if (!S.spectator && !woke) showBriefing(); else $('brief').style.display = 'none';
   if (!S.spectator && !woke) setTimeout(() => {
     if (S.mapBad) { message('This page is out of date with the server. Refresh the page (Ctrl/Cmd + Shift + R).', 'red'); return; }
@@ -727,7 +747,7 @@ function onEvent(m) {
         Object.assign(S.me, { L: m.L ?? S.me.L, alive: true, x: m.x, z: m.z, hidden: null, battery: Math.max(S.me.battery, 50), fl: true, stamina: 100 });
         S.spectating = null; S.jumpscare = false; S.red = 0; S.black = 0.6;
         $('spectate').style.display = 'none'; $('death').classList.remove('show');
-        showScreen(document.pointerLockElement === canvas ? '' : 'resume');
+        showScreen(inPlay() ? '' : 'resume');
         message(`${nameOf(m.by)} brought you back. Don't waste it.`);
       } else {
         const r = S.players.get(m.id);
@@ -875,7 +895,7 @@ function playEnding() {
 }
 
 function onEnd(m) {
-  closeBlueprint();
+  closeBlueprint(); S.touchActive = false; TC?.show(false);
   setTimeout(() => { S.voice?.stop(); S.voice = null; }, 15000); // keep talking over the end screen a little
   if (S.intro && S.intro.outro) { S.pendingEnd = m; return; } // let the drive away finish first
   if (S.intro) { S.intro.abort(); S.intro = null; $('hud').classList.add('show'); }
@@ -955,6 +975,8 @@ function hideObjectivesPopup() {
   message('The star in the basement wants five gifts. Find the riddles.', 'red');
 }
 addEventListener('keydown', (e) => { if (e.code === 'Enter' && $('objpop').classList.contains('show')) hideObjectivesPopup(); });
+$('objpop').addEventListener('click', () => hideObjectivesPopup());
+$('objpop').addEventListener('touchstart', (e) => { e.preventDefault(); hideObjectivesPopup(); }, { passive: false });
 
 // ---------------- notes & clues ----------------
 function openNote(id) {

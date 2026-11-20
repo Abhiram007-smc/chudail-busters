@@ -440,6 +440,37 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   **No "you are here" marker** (owner's call).
 - Tested with two players: one takes it, the other cannot; holder leaves -> it drops on the floor; picked up again.
 
+## 7i. Settings, pings, ghost types, achievements, voice chat, touch controls (LOCAL ONLY until the owner says)
+
+- **Settings** (`public/settings.js`, saved in localStorage `cb_settings_v1`, older `hm_sens`/`hm_vol`/`cb_calm`
+  migrated): mouse sensitivity, invert Y, FOV, master volume, voice chat on/off, push-to-talk, voice volume, quality
+  (low/medium/high = max pixel ratio 0.7/1/1.5; low also turns shadows off next game), reduce flashing, and every key
+  (14 actions; click a key, press the new one; one key per action; Reset). The game asks `held('sprint')` /
+  `is(e, 'interact')` instead of raw codes; arrows / right Shift / right Ctrl / Alt stay as fixed extras.
+  Opened from the lobby button and the pause ("click to resume") screen.
+- **Pings** (G): `doPing()` marks what you aim at: her (red "SHE'S HERE!") if she is in your sights, the item you
+  are looking at (its name), else where the crosshair hits (raycast on your floor). Server relays `ev ping` (1 per
+  1.2 s per player). Everyone sees a marker in the pinger's colour with distance and an up/down arrow if it is on
+  another floor, through walls, for 9 s (6 for danger), plus a chime.
+- **Ghost types** (`GHOST_TYPES` in shared/map.js; the server picks one per game, `ghostType` in the start message):
+  chudail (classic), blind (sight x0.12, hearing x2.2, speed x1.15, being lit never reveals you), shadow (cannot
+  move at all in torchlight, x1.35 in the dark), hungry (x0.82 speed, senses the nearest player every 25 s while
+  wandering). Shown at the top of the briefing/objectives popup and in the HUD.
+- **Achievements** (`public/achievements.js`, localStorage `cb_achievements_v1`): 13, tracked from server events
+  (escape, unchased escape, no bells, revives, 3 placements, bound while alive, under 12 min, hid while hunted,
+  solo, Nightmare, taken, all four ghost types). Toast when earned; the end screen lists this game's.
+- **Proximity voice chat** (`public/voice.js`): WebRTC audio mesh (STUN only, no TURN: very strict networks may not
+  connect), signalling through the game socket (`{t:'rtc', to, data}` relayed by the server). The lower id calls the
+  higher. Each voice goes through an HRTF panner at that player's head; x0.22 on another floor; the dead cannot talk to
+  the living but hear everyone; push-to-talk (V) or open mic. Loud talking (mic RMS > 0.12 for 0.35 s) sends
+  `{t:'noise'}`; the server treats it as a noise she hears within 11 m x hearing. 🔊 next to whoever is talking in the
+  team list. Needs https or localhost for the microphone (the LAN http address cannot use the mic).
+  Tested with two tabs and a fake tone microphone: connected, audio arrives, gains near/floor/dead = 1/0.23/0.
+- **Touch controls** (`public/touch.js`, `IS_TOUCH` = coarse pointer and no fine pointer): no pointer lock; tapping the
+  pause screen enters play (`onLocked()` is shared with pointer lock). Left stick (the bound move keys), drag on the
+  right 55% to look, buttons E / jump / crouch (toggle) / torch / bell / ping / map / talk (hold) / sprint (toggle)
+  that press the player's bound keys, a pause button. `body.touch` shrinks the HUD.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

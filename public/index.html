@@ -132,6 +132,23 @@
   .ach.out { opacity: 0; transform: translateY(-10px); }
   @keyframes achin { from { opacity: 0; transform: translateY(-14px) scale(.96); } to { opacity: 1; transform: none; } }
   #endAch { margin-top: 14px; text-align: center; color: #c9bfa6; } #endAch .ah { color: #ffd27a; letter-spacing: .2em; margin-bottom: 6px; } #endAch .ai { margin: 3px 0; } #endAch b { color: #e6dcc2; }
+  #touch { position: fixed; inset: 0; z-index: 9; display: none; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #touch.show { display: block; }
+  #touch .tlook { position: absolute; right: 0; top: 0; width: 55%; height: 100%; pointer-events: auto; }
+  #touch .tstick { position: absolute; left: 4vw; bottom: 6vh; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.06); border: 2px solid rgba(230,220,194,.25); pointer-events: auto; display: flex; align-items: center; justify-content: center; }
+  #touch .tstick i { width: 54px; height: 54px; border-radius: 50%; background: rgba(230,220,194,.25); border: 2px solid rgba(230,220,194,.5); }
+  #touch .tbtns { position: absolute; right: 3vw; bottom: 5vh; display: grid; grid-template-columns: repeat(3, 58px); gap: 10px; pointer-events: auto; z-index: 2; }
+  #touch .tbtns button, #touch .tpause { width: 58px; height: 58px; border-radius: 50%; background: rgba(20,14,12,.55); color: #e6dcc2; border: 2px solid rgba(230,220,194,.35); font: bold 20px 'Courier Prime', monospace; }
+  #touch .tbtns button.on { background: rgba(140,30,20,.6); border-color: #ffb07a; }
+  #touch .tpause { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; font-size: 12px; pointer-events: auto; }
+  /* phones: a smaller HUD that stays out of the way of the stick and the buttons */
+  body.touch #objective { font-size: 11px; max-width: 34vw; margin-top: 4px; }
+  body.touch #hud .tl, body.touch #objective { margin-left: 44px; }
+  body.touch #bars { left: 50%; transform: translateX(-50%); bottom: 8px; width: 30vw; font-size: 8px; }
+  body.touch #team { font-size: 11px; top: 10px; right: 12px; }
+  body.touch #floorTag { top: 8px; font-size: 11px; }
+  body.touch #objpop { pointer-events: auto; font-size: 12px; z-index: 10; }
+  body.touch #prompt { top: 40%; font-size: 13px; }
   #pings { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
   .ping { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; font: bold 12px 'Courier Prime', monospace; color: #f2ead4; text-shadow: 0 0 4px #000, 0 1px 2px #000; white-space: nowrap; }
   .ping b { font-size: 22px; line-height: 1; animation: pingpop .5s ease-out; }
@@ -300,7 +317,7 @@
 <div id="note"><div class="paper"><div class="text" id="noteText"></div><img id="noteSigil" alt="" /><div class="hint">PRESS E TO PUT IT DOWN</div></div></div>
 
 <div id="wakesub"></div>
-<div id="objpop"><div class="inner"></div><div class="hint">press <kbd>ENTER</kbd> to close</div></div>
+<div id="objpop"><div class="inner"></div><div class="hint">press <kbd>ENTER</kbd> (or tap) to close</div></div>
 <div id="resume" class="screen"><div id="brief"></div><h2>CLICK TO RESUME</h2><p>It won't wait for you.</p><button class="setbtn" id="pauseSettings">⚙ Settings</button></div>
 
 <div id="scare"></div>

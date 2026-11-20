@@ -51,6 +51,16 @@ co-op the friends chat about their holiday plan on the way (silent, subtitles on
 Get out through the front door and you drive away in the same car, wrecked from the crash, with everyone who made it
 out; she watches you go from the doorway.
 
+## Settings, voice chat, phones
+
+- **Settings** (lobby or pause screen): mouse sensitivity, invert, field of view, volume, voice chat, graphics
+  quality, reduce flashing, and every key can be changed.
+- **Proximity voice chat**: you hear your friends only when they are near you, from where they are. The dead
+  cannot talk to the living. Talk too loudly and she hears you. (Needs the https link or localhost for the mic.)
+- **Phones and tablets**: a move stick, drag to look, and buttons for everything.
+- **She is not always the same**: each game she is the Chudail, the Blind Bride, the Shadow or the Hungry One.
+- **Achievements**: 13 to earn, remembered in your browser.
+
 ## Things that watch you
 
 Screaming plaster faces are set into the corridor walls and stone statues of her stand in the rooms and halls.
@@ -105,6 +115,8 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 | C | crouch: completely silent; with your light off she can walk right past you |
 | Space | jump (everyone sees it) |
 | M | read the house blueprint (if you carry it); 1/2/3 change floor |
+| G | ping: mark a spot (or the item / her) for your friends |
+| V | push to talk (if push-to-talk is on in Settings) |
 | F | flashlight (the battery drains; find spare batteries) |
 | E | take, read notes, place items on the star, hide in lockers, wardrobes and under beds, revive a friend (hold) |
 | Q | ring a **spirit bell**: freezes her for 6 seconds and scares the Crawler away |
