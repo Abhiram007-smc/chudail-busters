@@ -455,6 +455,15 @@ export class AudioSys {
     const sg = ctx.createGain(); this.env(sg, t, 0.01, vol * 1.3, 1.1); sub.connect(sg); sg.connect(this.master); sub.start(t); sub.stop(t + 1.3);
     hp.connect(g); this.out(g, 0.7);
   }
+  // a friend marked something: a soft two-note chime (a harsh one for danger)
+  ping(danger = false) {
+    const ctx = this.ctx; if (!ctx) return; const t = ctx.currentTime;
+    (danger ? [660, 520] : [880, 1320]).forEach((f, k) => {
+      const o = ctx.createOscillator(); o.type = danger ? 'square' : 'sine'; o.frequency.value = f;
+      const g = ctx.createGain(); this.env(g, t + k * 0.09, 0.005, danger ? 0.08 : 0.12, 0.25);
+      o.connect(g); g.connect(this.master); o.start(t + k * 0.09); o.stop(t + k * 0.09 + 0.35);
+    });
+  }
   // she has stopped and is looking at you: a low swell that tightens like held breath, under a slow heartbeat
   stareDrone(dur = 2.6) {
     const ctx = this.ctx; if (!ctx) return; const t = ctx.currentTime;

@@ -21,6 +21,13 @@ export const DIFFICULTY = {
   hard: { label: 'Hard', speed: 1.15, sight: 1.25, hearing: 1.35, crawler: true, items: 0.75, revive: 0.7 },
   nightmare: { label: 'Nightmare', speed: 1.3, sight: 1.5, hearing: 1.7, crawler: true, items: 0.5, revive: 0.45 },
 };
+// what she is tonight (the server picks one per game): multipliers on top of the difficulty
+export const GHOST_TYPES = {
+  chudail: { name: 'The Chudail', hint: 'She sees, she hears, she hunts. The one from the stories.', sight: 1, hearing: 1, speed: 1, lit: 0.45, dark: 1 },
+  blind: { name: 'The Blind Bride', hint: 'She cannot see you at all, but she hears everything, and she is fast. Crouch. Sneak. Do not run.', sight: 0.12, hearing: 2.2, speed: 1.15, lit: 1, dark: 1, blind: true },
+  shadow: { name: 'The Shadow', hint: 'In torchlight she cannot move at all. In the dark she is very fast. Keep your light on her.', sight: 1, hearing: 0.9, speed: 1, lit: 0, dark: 1.35 },
+  hungry: { name: 'The Hungry One', hint: 'Slow, but she never stops. Every so often she simply knows where the nearest of you is.', sight: 1, hearing: 1.1, speed: 0.82, lit: 0.6, dark: 1, sense: 25 },
+};
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // The server (Node) and every browser must build the exact same map from a seed. Math.hypot is not
 // guaranteed to round identically across JS engines (a 1-ulp difference flips tie-breaks and the maps

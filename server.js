@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
 import {
-  CELL, TALISMANS, DIFFICULTY, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, resolveSolid, isWall, cellOf, stairTransition,
+  CELL, TALISMANS, DIFFICULTY, GHOST_TYPES, generateMap, mapSignature, cellType, bfsPath3, lineOfSight, resolveCircle, resolveSolid, isWall, cellOf, stairTransition,
 } from './shared/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,6 +93,7 @@ function startMsg() {
     taken: [...game.talismans, ...game.batteries, ...game.bells, ...game.souls].filter((i) => i.taken).map((i) => i.id),
     moved: game.talismans.filter((i) => i.moved).map((i) => ({ id: i.id, x: i.x, z: i.z, L: i.L })),
     progress: game.progress, placed: game.placed, exitOpen: game.exitOpen, stage: game.stage,
+    ghostType: game.ghostType || 'chudail',
     bp: game.bp ? { holder: game.bp.holder, x: game.bp.x, z: game.bp.z, L: game.bp.L, onTable: game.bp.onTable } : null,
   };
 }
@@ -107,6 +108,7 @@ function startGame() {
   game.batteries = thin(m.batteries, d.items);
   game.bells = thin(m.bells, d.items);
   game.bp = { ...m.blueprint, holder: null, onTable: true }; // the one blueprint of the house
+  { const types = Object.keys(GHOST_TYPES); game.ghostType = types[Math.floor(Math.random() * types.length)]; } // what she is tonight
   game.souls = thin(m.souls, d.revive);
   game.progress = 0; game.placed = [null, null, null, null, null];
   game.exitOpen = false; game.sniffed = {}; game.stage = 'items';
@@ -238,7 +240,8 @@ function moveEntity(e, tx, tz, speed, dt, radius) {
 function updateMonster(dt) {
   const m = game.monster, map = game.map;
   if (!m) return;
-  const t = now(), d = D();
+  const t = now(), d0 = D(), G = GHOST_TYPES[game.ghostType] || GHOST_TYPES.chudail;
+  const d = { ...d0, sight: d0.sight * G.sight, hearing: d0.hearing * G.hearing, speed: d0.speed * G.speed };
   const targets = activePlayers();
   if (m.state === 'bound') { m.speed = 0; m.lit = false; return; }
   if (t < game.startTime + 18 + INTRO_S) { m.state = 'dormant'; m.speed = 0; return; }
@@ -316,7 +319,13 @@ function updateMonster(dt) {
     const visible = dist < near || (dist < range && (facing > (p.cr ? 0.5 : 0.25) || (!p.cr && dist < 5)));
     if (visible && dist < seenD) { seen = p; seenD = dist; }
   }
-  if (!seen && lit) { seen = litBy; seenD = Math.hypot(litBy.x - m.x, litBy.z - m.z); }
+  if (!seen && lit && !G.blind) { seen = litBy; seenD = Math.hypot(litBy.x - m.x, litBy.z - m.z); }
+  // the Hungry One: every so often she simply knows where the nearest of you is
+  if (G.sense && !seen && m.state === 'wander' && t > (m.senseT || 0)) {
+    m.senseT = t + G.sense;
+    let near = null, nd = 1e9; for (const p of targets) { if (p.hid) continue; const dd = Math.hypot(p.x - m.x, p.z - m.z) + (p.L !== m.L ? 30 : 0); if (dd < nd) { nd = dd; near = p; } }
+    if (near) { m.state = 'hunt'; m.huntT = 0; setGoal(m, { x: near.x, z: near.z, L: near.L }); }
+  }
   m.lit = lit;
 
   // --- hearing (same floor)
@@ -436,7 +445,7 @@ function updateMonster(dt) {
   if (m.crawl) speed *= m.state === 'chase' ? 1.08 : 1.25; // skittering
   m.lunge = false;
   if (m.state === 'chase' && seen && seenD < 3) { speed *= 1.3; m.lunge = true; }
-  if (lit) speed *= 0.45;
+  speed *= lit ? G.lit : G.dark; // the Shadow cannot move in torchlight at all
   if (m.stall > 0) { m.stall -= dt; speed = 0; }
   m.speed = speed;
 
@@ -644,6 +653,11 @@ wss.on('connection', (ws) => {
       if (m && !['dormant', 'bound'].includes(m.state) && m.L === me.L && Math.hypot(m.x - me.x, m.z - me.z) < 18) { m.stunT = 6; m.state = 'stunned'; froze = true; }
       if (c && ['ceiling', 'drop', 'crawl'].includes(c.state) && c.L === me.L && Math.hypot(c.x - me.x, c.z - me.z) < 18) { c.state = 'retreat'; c.t = now() + 1.2; scared = true; }
       broadcast({ t: 'ev', e: 'bell', by: me.id, x: me.x, z: me.z, L: me.L, bells: me.bells, froze, scared });
+    } else if (msg.t === 'ping') { // mark a spot for everyone (at most one every 1.2 s)
+      if (!me.alive || me.escaped || now() < (me.pingT || 0)) return;
+      me.pingT = now() + 1.2;
+      const kind = ['spot', 'item', 'danger'].includes(msg.kind) ? msg.kind : 'spot';
+      broadcast({ t: 'ev', e: 'ping', by: me.id, x: +msg.x || 0, y: +msg.y || 0, z: +msg.z || 0, L: [-1, 0, 1].includes(msg.L) ? msg.L : me.L, kind, label: String(msg.label || '').slice(0, 40) });
     } else if (msg.t === 'bp') { // take the blueprint
       const b = game.bp;
       if (!b || b.holder || !me.alive || me.escaped || me.hid || me.L !== b.L || Math.hypot(b.x - me.x, b.z - me.z) > 2.6) return;

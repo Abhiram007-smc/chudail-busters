@@ -4,11 +4,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
+import { CELL, WALL_H, FLOOR_H, LEVELS, TALISMANS, DIFFICULTY, GHOST_TYPES, LEVEL_NAMES, generateMap, mapSignature, resolveCircle, pushOutBox, lineOfSight, isWall, heightAt, stairTransition, staticColliders } from '/shared/map.js';
 import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray, getModel } from './entities.js';
 import * as TX from './textures.js';
+import { SETTINGS, is, makeHeld, initSettings, openSettings, closeSettings, settingsOpen } from './settings.js';
+import { newRun, track as trackAch, runSummary } from './achievements.js';
 import { preloadIntro, playIntro, playOutro } from './intro.js';
 import { buildStatues } from './statues.js';
 import { GLTFLoader as OutroLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -112,6 +114,7 @@ const S = {
   spectating: null, jumpscare: false, sens: 1.2, lastSend: 0, prompt: null, escSent: 0,
 };
 const keys = {};
+const held = makeHeld(keys); // held('sprint'): honours the player's key bindings (settings.js)
 
 // ---------------- networking ----------------
 let ws = null;
@@ -138,7 +141,7 @@ function handle(m) {
       break;
     case 'start': startGame(m); break;
     case 'snap': applySnap(m); break;
-    case 'ev': onEvent(m); break;
+    case 'ev': onEvent(m); if (S.run) trackAch(S.run, m).forEach(achToast); break;
     case 'end': onEnd(m); break;
   }
 }
@@ -216,14 +219,19 @@ $('specBtn').onclick = () => {
 };
 $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
 $('startBtn').onclick = () => { audio.init(); send({ t: 'start' }); };
-$('sens').oninput = (e) => { S.sens = +e.target.value; try { localStorage.setItem('hm_sens', S.sens); } catch {} };
-$('vol').oninput = (e) => { audio.setVolume(+e.target.value); try { localStorage.setItem('hm_vol', e.target.value); } catch {} };
-$('calm').onchange = (e) => { FX.calm = e.target.checked; try { localStorage.setItem('cb_calm', FX.calm ? '1' : '0'); } catch {} };
-try {
-  if (localStorage.getItem('hm_sens')) { S.sens = +localStorage.getItem('hm_sens'); $('sens').value = S.sens; }
-  if (localStorage.getItem('cb_calm') === '1') { FX.calm = true; $('calm').checked = true; }
-  if (localStorage.getItem('hm_vol')) { audio.volume = +localStorage.getItem('hm_vol'); $('vol').value = audio.volume; }
-} catch {}
+// settings (public/settings.js): applied now and whenever they change
+function applySettings(k) {
+  S.sens = SETTINGS.sens; FX.calm = !!SETTINGS.calm; audio.setVolume(SETTINGS.volume);
+  if (!k || k === 'quality') {
+    perf.max = SETTINGS.quality === 'low' ? 0.7 : SETTINGS.quality === 'medium' ? 1 : Math.min(devicePixelRatio, 1.5);
+    if (perf.pr > perf.max) { perf.pr = perf.max; renderer.setPixelRatio(perf.pr); if (S.composer) { S.composer.setPixelRatio(perf.pr); S.composer.setSize(innerWidth, innerHeight); } }
+    renderer.shadowMap.enabled = SETTINGS.quality !== 'low'; // takes effect in the next game
+  }
+  window.dispatchEvent(new CustomEvent('cb-settings', { detail: k }));
+}
+initSettings(applySettings);
+$('lobbySettings').onclick = (e) => { e.stopPropagation(); openSettings(); };
+$('pauseSettings').onclick = (e) => { e.stopPropagation(); openSettings(); };
 
 // menu: grain + eyes in the dark
 const grainCtx = $('grain').getContext('2d');
@@ -249,16 +257,17 @@ setInterval(() => {
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (S.phase !== 'playing') return;
-  if (e.code === 'KeyF' && S.me?.alive && !S.me.escaped && !S.me.hidden) {
+  if (is(e, 'light') && S.me?.alive && !S.me.escaped && !S.me.hidden) {
     if (S.me.battery > 0) { S.me.fl = !S.me.fl; audio.click(); }
   }
-  if (e.code === 'KeyM' && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else if (S.bp?.holder === S.myId) openBlueprint(S.me.L); else if (S.bp) message(S.bp.holder ? `${whoName(S.bp.holder)} has the blueprint.` : 'The blueprint of the house is on a table by the front door.'); return; }
+  if (is(e, 'ping') && S.me?.alive && !S.me.escaped && !S.me.hidden) { doPing(); return; }
+  if (is(e, 'map') && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else if (S.bp?.holder === S.myId) openBlueprint(S.me.L); else if (S.bp) message(S.bp.holder ? `${whoName(S.bp.holder)} has the blueprint.` : 'The blueprint of the house is on a table by the front door.'); return; }
   if (S.bpOpen && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { openBlueprint({ Digit1: -1, Digit2: 0, Digit3: 1 }[e.code]); return; }
-  if ((e.code === 'KeyE' || e.code === 'Escape') && S.reading) { closeNote(); return; }
-  if (e.code === 'KeyE' && S.me?.hidden) { send({ t: 'unhide' }); return; }
-  if (e.code === 'KeyE' && S.prompt && S.prompt.note) { openNote(S.prompt.id); S.prompt = null; return; }
-  if (e.code === 'KeyE' && S.prompt && S.prompt.place) { send({ t: 'place', slot: S.prompt.slot }); S.prompt = null; return; }
-  if (e.code === 'KeyE' && S.prompt && !S.prompt.revive) {
+  if ((is(e, 'interact') || e.code === 'Escape') && S.reading) { closeNote(); return; }
+  if (is(e, 'interact') && S.me?.hidden) { send({ t: 'unhide' }); return; }
+  if (is(e, 'interact') && S.prompt && S.prompt.note) { openNote(S.prompt.id); S.prompt = null; return; }
+  if (is(e, 'interact') && S.prompt && S.prompt.place) { send({ t: 'place', slot: S.prompt.slot }); S.prompt = null; return; }
+  if (is(e, 'interact') && S.prompt && !S.prompt.revive) {
     if (S.prompt.hide) send({ t: 'hide', id: S.prompt.id }); else if (S.prompt.id === 'bp') send({ t: 'bp' }); else send({ t: 'pickup', id: S.prompt.id });
     S.prompt = null;
   }
@@ -268,10 +277,10 @@ addEventListener('keydown', (e) => {
     S.droneFollow = n === 0 ? null : list[n - 1]?.id || null;
     if (!S.droneFollow) for (const p of S.players.values()) p.avatar.userData.setShown(!p.hid);
   }
-  if (e.code === 'KeyQ' && S.me?.alive && !S.me.escaped && !S.me.hidden) {
+  if (is(e, 'bell') && S.me?.alive && !S.me.escaped && !S.me.hidden) {
     if (S.me.bells > 0) send({ t: 'bell' }); else message('You have no spirit bells.');
   }
-  if (e.code === 'KeyE' && S.prompt && S.prompt.revive && !S.reviving) { S.reviving = { start: performance.now(), id: S.prompt.target }; audio.whisper(0, 0.25, 1.2); }
+  if (is(e, 'interact') && S.prompt && S.prompt.revive && !S.reviving) { S.reviving = { start: performance.now(), id: S.prompt.target }; audio.whisper(0, 0.25, 1.2); }
   if (e.code === 'Tab') e.preventDefault();
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -280,13 +289,13 @@ addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== canvas || !S.me || (!S.me.alive && !S.spectator) || S.jumpscare) return;
   const k = 0.0021 * S.sens;
   S.me.yaw -= e.movementX * k;
-  S.me.pitch = clamp(S.me.pitch - e.movementY * k, S.spectator ? -1.55 : -1.45, 1.45);
+  S.me.pitch = clamp(S.me.pitch - e.movementY * k * (SETTINGS.invertY ? -1 : 1), S.spectator ? -1.55 : -1.45, 1.45);
   if (S.me.hidden) { const bed = S.world.hides.get(S.me.hidden)?.type === 'bed'; S.me.yaw = S.me.hideYaw + clamp(angDiff(S.me.yaw, S.me.hideYaw), bed ? -0.8 : -0.55, bed ? 0.8 : 0.55); S.me.pitch = clamp(S.me.pitch, bed ? -0.1 : -0.35, bed ? 0.12 : 0.3); }
 });
 addEventListener('mousedown', () => {
   if (S.phase === 'playing' && document.pointerLockElement === canvas && S.spectating !== null) nextSpectate();
 });
-$('resume').onclick = () => { audio.init(); canvas.requestPointerLock(); };
+$('resume').onclick = () => { if (settingsOpen()) return; audio.init(); canvas.requestPointerLock(); };
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;
   if (S.phase === 'playing' && !locked) showScreen('resume');
@@ -377,6 +386,8 @@ function buildGame(m) {
   S.world = buildWorld(scene, map);
   try { S.statues = buildStatues({ map, world: S.world, seed: m.seed }); } catch (e) { console.warn('statues failed', e); S.statues = null; }
   buildBlueprint(map, m.bp);
+  S.ghostType = GHOST_TYPES[m.ghostType] ? m.ghostType : 'chudail';
+  S.run = S.spectator ? null : newRun({ myId: S.myId, solo: m.players.length === 1, difficulty: m.difficulty, ghostType: S.ghostType });
 
   S.hemi = new THREE.HemisphereLight(0x2a3448, 0x140c08, 0.9); scene.add(S.hemi);
   playerGlow = new THREE.PointLight(0x8a96b0, 1.2, 6, 1.6); camera.add(playerGlow);
@@ -456,6 +467,7 @@ function buildGame(m) {
   S.composer.addPass(new OutputPass());
   S.post = new ShaderPass(HorrorShader); S.composer.addPass(S.post);
 
+  (S.pings || []).forEach((p) => p.el.remove()); S.pings = [];
   S.fear = 0; S.red = 0; S.black = 1; S.shake = 0; S.timers = []; S.anims = []; S.spectating = null; S.jumpscare = false; S.ghostState = null;
   S.nextScare = performance.now() / 1000 + rnd(30, 45);
   S.flickUntil = 0; S.lightsOutUntil = 0; S.torchCtl = null;
@@ -750,6 +762,7 @@ function onEvent(m) {
       buildIcons(); setObjective(); renderClues();
       break;
     }
+    case 'ping': showPing(m); break;
     case 'bp': { // the blueprint changed hands, fell, or went back on its table
       S.bp = { holder: m.holder, x: m.x, z: m.z, L: m.L, onTable: m.onTable };
       placeBlueprint();
@@ -857,6 +870,8 @@ function onEnd(m) {
   const h = $('endTitle');
   h.textContent = m.win ? 'YOU ESCAPED' : 'NO ONE ESCAPED';
   h.className = m.win ? 'win' : 'lose';
+  const ach = runSummary(S.run);
+  $('endAch').innerHTML = ach.length ? '<div class="ah">ACHIEVEMENTS</div>' + ach.map((a) => `<div class="ai">🏆 <b>${esc(a.name)}</b> ${esc(a.desc)}</div>`).join('') : '';
   $('endList').innerHTML = m.players.map((p) => `<li><span class="dot" style="color:${p.color};background:${p.color}"></span> ${esc(p.name)}: ${p.escaped ? '<span style="color:#cfe">escaped</span>' : p.alive ? 'still inside…' : '<span style="color:#a22">taken</span>'}</li>`).join('');
   setTimeout(() => { $('death').classList.remove('show'); showScreen('end'); }, S.jumpscare ? 2500 : 600);
 }
@@ -866,6 +881,7 @@ function setObjective() {
   const carried = (S.me?.items || []).map((id) => S.world.talismans.get(id)?.name).filter(Boolean);
   const item = (done, active, text) => `<div class="obj ${done ? 'done' : active ? 'active' : ''}">${done ? '☑' : '☐'} ${text}</div>`;
   $('objective').innerHTML =
+    `<div class="h" style="color:#ff8a7a">${esc((GHOST_TYPES[S.ghostType] || GHOST_TYPES.chudail).name)}</div>` +
     '<div class="h">OBJECTIVES</div>' +
     item(S.progress >= TALISMANS || st !== 'items', st === 'items' && S.progress < TALISMANS, `Find the 5 ritual items <span class="n">(${S.progress}/${TALISMANS})</span>`) +
     item(st !== 'items', st === 'items', `Place them on the star in the basement shrine <span class="n">(${placedN}/${TALISMANS})</span>`) +
@@ -877,7 +893,10 @@ function setObjective() {
 
 // briefing shown on the "click to enter" screen at the start of a game
 function showBriefing(target = $('brief')) {
+  const gt = GHOST_TYPES[S.ghostType] || GHOST_TYPES.chudail;
   target.innerHTML = `
+    <div class="bh" style="color:#ff8a7a">TONIGHT SHE IS ${esc(gt.name.toUpperCase())}</div>
+    <p style="margin:0 0 12px">${esc(gt.hint)}</p>
     <div class="bh">YOUR OBJECTIVES</div>
     <ol>
       <li><b>Find the 5 ritual items</b> hidden on all three floors: a skull, a black candle, a cracked mirror, a cursed doll and a braid of her hair. The staff left riddles in their notes, and each item has her sign: find the same sign scratched on the walls. Listen too: they whisper when you are close.</li>
@@ -989,6 +1008,65 @@ function showGhost(x, z, until, kind) {
   S.ghostState = { until, seen: false, kind, lookT: 0 };
 }
 function hideGhost() { S.ghost.visible = false; S.ghost.userData.setCrawl?.(0, 1, WALL_H, true); S.ghostState = null; }
+
+// ---------------- achievements ----------------
+function achToast(a) {
+  let box = $('achbox'); if (!box) { box = document.createElement('div'); box.id = 'achbox'; document.body.appendChild(box); }
+  const el = document.createElement('div'); el.className = 'ach';
+  el.innerHTML = `<b>🏆 ACHIEVEMENT</b><span>${esc(a.name)}</span><small>${esc(a.desc)}</small>`;
+  box.appendChild(el); audio.ping?.(false);
+  setTimeout(() => el.classList.add('out'), 4200); setTimeout(() => el.remove(), 5000);
+}
+
+// ---------------- pings: mark a spot for your friends ----------------
+const pingRay = new THREE.Raycaster();
+function doPing() {
+  const me = S.me; if (!S.scene) return;
+  let kind = 'spot', label = 'HERE', point = null;
+  // she is in your sights?
+  const m = S.mon, dx = m.x - camera.position.x, dz = m.z - camera.position.z, d = Math.hypot(dx, dz), f = camForward();
+  if ((m.L || 0) === me.L && d < 25 && (dx * f.x + dz * f.z) / (d || 1) > 0.94 && lineOfSight(S.map, me.L, camera.position.x, camera.position.z, m.x, m.z)) {
+    kind = 'danger'; label = "SHE'S HERE!"; point = new THREE.Vector3(m.x, me.L * FLOOR_H + 1.8, m.z);
+  } else if (S.prompt && S.prompt.id && !S.prompt.revive && !S.prompt.hide) { // the thing you are looking at
+    const it = S.world.talismans.get(S.prompt.id) || S.world.batteries.get(S.prompt.id) || S.world.bells.get(S.prompt.id) || S.world.souls.get(S.prompt.id) || (S.prompt.id === 'bp' ? S.bp : null);
+    if (it) { kind = 'item'; label = String(S.prompt.label || 'ITEM').replace(/^(Take the |Pick up |Take )/i, '').toUpperCase(); point = new THREE.Vector3(it.x, me.L * FLOOR_H + 0.6, it.z); }
+  }
+  if (!point) { // wherever the crosshair hits
+    pingRay.setFromCamera({ x: 0, y: 0 }, camera); pingRay.far = 30;
+    const hit = pingRay.intersectObject(S.world.levelGroups[me.L], true).find((h) => h.object.visible && h.object.isMesh);
+    point = hit ? hit.point : camera.position.clone().addScaledVector(pingRay.ray.direction, 6);
+  }
+  send({ t: 'ping', x: +point.x.toFixed(2), y: +point.y.toFixed(2), z: +point.z.toFixed(2), L: me.L, kind, label });
+}
+function showPing(m) {
+  let layer = $('pings'); if (!layer) { layer = document.createElement('div'); layer.id = 'pings'; document.body.appendChild(layer); }
+  const who = m.by === S.myId ? null : S.players.get(m.by);
+  const col = m.kind === 'danger' ? '#ff3b2f' : (who ? who.color : '#ffd27a');
+  const el = document.createElement('div'); el.className = 'ping ' + m.kind;
+  el.innerHTML = `<b style="color:${col}">${m.kind === 'danger' ? '⚠' : '◆'}</b><span>${esc(m.label)}</span><i></i><small>${esc(who ? who.name : 'you')}</small>`;
+  layer.appendChild(el);
+  S.pings = (S.pings || []).concat([{ el, x: m.x, y: m.y, z: m.z, L: m.L, until: performance.now() / 1000 + (m.kind === 'danger' ? 6 : 9) }]);
+  audio.ping?.(m.kind === 'danger');
+  if (m.by !== S.myId) message(`${who ? who.name : 'Someone'} pinged: ${m.label}`, m.kind === 'danger' ? 'red' : '');
+}
+const pv = new THREE.Vector3();
+function updatePings() {
+  if (!S.pings || !S.pings.length) return;
+  const t = performance.now() / 1000;
+  S.pings = S.pings.filter((p) => {
+    if (t > p.until || !S.scene) { p.el.remove(); return false; }
+    pv.set(p.x, p.y + 0.4, p.z).project(camera);
+    const behind = pv.z > 1, other = p.L !== S.camL;
+    let sx = (pv.x * 0.5 + 0.5) * innerWidth, sy = (-pv.y * 0.5 + 0.5) * innerHeight;
+    if (behind) { sx = innerWidth - sx; sy = innerHeight - 40; }
+    sx = Math.max(30, Math.min(innerWidth - 30, sx)); sy = Math.max(40, Math.min(innerHeight - 40, sy));
+    p.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
+    const d = Math.hypot(p.x - camera.position.x, p.z - camera.position.z);
+    p.el.querySelector('i').textContent = `${Math.round(d)} m${other ? (p.L > S.camL ? ' ↑' : ' ↓') : ''}`;
+    p.el.style.opacity = Math.min(1, (p.until - t) / 1.2) * (other ? 0.6 : 1);
+    return true;
+  });
+}
 
 // ---------------- the blueprint of the house ----------------
 function whoName(id) { return id === S.myId ? 'You' : S.players.get(id)?.name || 'Someone'; }
@@ -1372,15 +1450,15 @@ function updatePlayer(dt, t) {
   const me = S.me, map = S.map;
   if (me.hidden) return updateHidden(dt, t);
   let ix = 0, iz = 0;
-  if (keys.KeyW || keys.ArrowUp) iz += 1;
-  if (keys.KeyS || keys.ArrowDown) iz -= 1;
-  if (keys.KeyA || keys.ArrowLeft) ix -= 1;
-  if (keys.KeyD || keys.ArrowRight) ix += 1;
+  if (held('forward')) iz += 1;
+  if (held('back')) iz -= 1;
+  if (held('left')) ix -= 1;
+  if (held('right')) ix += 1;
   const len = Math.hypot(ix, iz); if (len) { ix /= len; iz /= len; }
-  me.crouch = !!keys.KeyC;
-  me.sneak = !!(keys.ControlLeft || keys.ControlRight || keys.AltLeft) && !me.crouch;
+  me.crouch = held('crouch');
+  me.sneak = held('sneak') && !me.crouch;
   // sprint in any direction except straight backwards
-  const wantSprint = (keys.ShiftLeft || keys.ShiftRight) && iz > -0.5 && !me.crouch && !me.sneak && len > 0;
+  const wantSprint = held('sprint') && iz > -0.5 && !me.crouch && !me.sneak && len > 0;
   me.sprint = wantSprint && !me.exhausted && me.stamina > 0;
   if (me.sprint) { me.stamina -= dt * 16; if (me.stamina <= 0) { me.stamina = 0; me.exhausted = true; message('Out of breath…'); } }
   else { me.stamina = Math.min(100, me.stamina + dt * (me.exhausted ? 14 : 18)); if (me.exhausted && me.stamina > 20) me.exhausted = false; }
@@ -1408,7 +1486,7 @@ function updatePlayer(dt, t) {
   me.moving = moved > dt * 0.4;
   // jump (Space): a real arc; everyone else plays the same arc from the 'jump' event
   if (me.jy == null) { me.jy = 0; me.jv = 0; me.land = 0; }
-  const wantJump = !!keys.Space;
+  const wantJump = held('jump');
   if (wantJump && !me.spaceWas && me.jy === 0 && me.jv === 0 && !me.crouch && !S.wakePending && me.wake == null && me.stamina > 10) {
     me.jv = JUMP.v; me.stamina -= 10; send({ t: 'jump' }); audio.step(0.18, null, false, surfaceAt(me.x, me.z, me.L));
   }
@@ -1428,7 +1506,7 @@ function updatePlayer(dt, t) {
   // field-of-view kick so sprinting feels fast
   // while she stares back at you, the hall seems to stretch and pull her closer (slow zoom in)
   const staring = t < (S.stareUntil || 0);
-  const fovT = staring ? 54 : me.sprint && me.moving ? 82 : 72;
+  const fovT = staring ? SETTINGS.fov - 18 : me.sprint && me.moving ? SETTINGS.fov + 10 : SETTINGS.fov;
   if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * (staring ? 0.9 : 6)); camera.updateProjectionMatrix(); }
   let eyeT = me.crouch ? 1.05 : 1.62;
   if (me.wake != null) { // getting up off the floor after the crash
@@ -1477,9 +1555,9 @@ function updateDrone(dt) {
     S.droneFollow = null;
   }
   let ix = 0, iz = 0, iy = 0;
-  if (keys.KeyW) iz += 1; if (keys.KeyS) iz -= 1; if (keys.KeyA) ix -= 1; if (keys.KeyD) ix += 1;
-  if (keys.Space) iy += 1; if (keys.KeyC || keys.ControlLeft) iy -= 1;
-  const sp = ((keys.ShiftLeft || keys.ShiftRight) ? 20 : 7) * dt;
+  if (held('forward')) iz += 1; if (held('back')) iz -= 1; if (held('left')) ix -= 1; if (held('right')) ix += 1;
+  if (held('jump')) iy += 1; if (held('crouch') || held('sneak')) iy -= 1;
+  const sp = (held('sprint') ? 20 : 7) * dt;
   const cp = Math.cos(me.pitch);
   me.x += (-Math.sin(me.yaw) * cp * iz + Math.cos(me.yaw) * ix) * sp;
   me.z += (-Math.cos(me.yaw) * cp * iz - Math.sin(me.yaw) * ix) * sp;
@@ -1739,7 +1817,7 @@ function updateInteract() {
     if (d > 2.4) continue;
     if (me.revives > 0) {
       if (S.reviving && S.reviving.id === r.id) {
-        if (!keys.KeyE || d > 2.6) S.reviving = null;
+        if (!held('interact') || d > 2.6) S.reviving = null;
         else {
           const tt = (performance.now() - S.reviving.start) / 1000;
           setPrompt(`<b>E</b>Bringing ${esc(r.name)} back… <span style="display:inline-block;width:160px;height:6px;background:#012;vertical-align:middle"><i style="display:block;height:100%;width:${Math.round(Math.min(100, tt / 3 * 100))}%;background:#7fd0ff"></i></span>`);
@@ -1887,6 +1965,7 @@ function frame(now) {
   updateMonster(dt, t);
   updateCrawler(dt, t);
   S.statues?.update(dt, camera, S.camL, audio);
+  updatePings();
   updateLights(dt, t);
   S.world.update(dt, t);
   updateScares(dt, t);
@@ -1927,6 +2006,7 @@ function adaptResolution(now) {
 requestAnimationFrame(frame);
 
 // debug hooks (used for automated testing)
+applySettings(); // the saved settings, now that everything they touch exists
 window.__hm.frame = frame; // lets automated tests step the game while the tab is hidden
 window.__hm.S = S; window.__hm.keys = keys; window.__hm.runScare = (type) => runScare(performance.now() / 1000, type);
 window.__hm.playEnding = () => playEnding(); window.__hm.onMsg = (m) => handle(m);
