@@ -519,6 +519,21 @@ Horn = `public/sounds/car_horn.mp3` (CC0) via `snd.hornSample()`; synth only if 
   (`map.blueprint` removed; server `game.bp = null`, its handlers are no-ops).
 - Determinism checked: 20 seeds x 3 themes hash the same in Node and the browser; 60/60 generate for every theme.
 
+## 7m. Five places, voice for everyone, mic mute, Golu, batteries and the backpack
+
+- Two more places in `MAP_THEMES`: **hotel** (Hotel Grand Regal: lobby, guest rooms, bridal suite, ballroom, bar,
+  kitchen, laundry, linen room, cold store) and **police** (Old Kotwali Police Station: front desk, lockup, women
+  cell, interrogation, SHO's office, record room, evidence room, mess hall, mortuary). Tints in world.js.
+- **Voice**: everyone hears everyone, alive, dead or escaped; **N** (action `mute`) toggles your mic (also a Settings
+  checkbox, `SETTINGS.micMuted`); the team list shows "🎙 MIC ON" / "🔇 MIC MUTED". Settings "Voice chat on" turns
+  voice off completely.
+- **Golu** (`golu` in CHARACTERS/CHARS): the `man` model (`charModel`) with `girth` 1.6 (x/z scale on the avatar
+  wrap and the seated character); the lobby picture is man.webp stretched.
+- **Batteries**: 30 per map (was 18), Hard/Nightmare keep at least 80% of them (`thin(..., max(0.8, items))`). A full
+  torch lasts ~6 min (was 3:20). **Backpack**: picking up a battery with the torch above 45% stores it (up to 4,
+  `me.spares`, HUD "🎒 BATTERIES ×n [R]"); **R** (action `reload`) adds 55%; a dead torch swaps one in by itself.
+  Touch has 🔋 and 🔇 buttons.
+
 ## 7c. Own domain (chudailbusters.com) via a named Cloudflare tunnel
 
 The owner chose **chudailbusters.com**, registered on Cloudflare (the owner buys it; Claude must not purchase).

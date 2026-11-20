@@ -16,14 +16,17 @@ export const CHARACTERS = [
   { key: 'punk', name: 'Jax', role: 'urban explorer' },
   { key: 'casual', name: 'Emily', role: 'the reporter' },
   { key: 'hooded', name: 'Rook', role: 'the medium' },
+  { key: 'golu', model: 'man', name: 'Golu', role: 'the big guy', girth: 1.6 }, // the man model, made wide
 ];
+export const charModel = (key) => (CHARACTERS.find((c) => c.key === key)?.model || key);
+export const charGirth = (key) => CHARACTERS.find((c) => c.key === key)?.girth || 1;
 const DEFAULT_CHARS = ['adventurer', 'soldier', 'hoodie', 'woman'];
 const loading = {};
 // load one downloaded character on demand
 export function ensureChar(key) {
   if (!CHARACTERS.some((c) => c.key === key)) return Promise.resolve();
   if (ANIMATED[key]) return Promise.resolve();
-  if (!loading[key]) loading[key] = new Promise((res) => new GLTFLoader().load(`/models/${key}.glb`, (g) => { ANIMATED[key] = g; res(); }, undefined, () => res()));
+  if (!loading[key]) loading[key] = new Promise((res) => new GLTFLoader().load(`/models/${charModel(key)}.glb`, (g) => { ANIMATED[key] = g; res(); }, undefined, () => res()));
   return loading[key];
 }
 export function charLoaded(key) { return !!ANIMATED[key]; }
@@ -640,6 +643,7 @@ export function createAvatar(name, color, charKey) {
   const label = nameSprite(name, color); label.position.y = 2.0; root.add(label);
   const key = charKey || DEFAULT_CHARS[0];
   const glb = ANIMATED[key] ? animatedAvatar(body, arm, armM, ANIMATED[key]) : MODELS.survivor ? upgradeAvatar(body, arm, armM, col) : null;
+  if (glb && glb.inst && charGirth(key) !== 1) glb.inst.scale.set(charGirth(key), 1, charGirth(key)); // Golu is wide
 
   const xray = []; // no glow through walls for teammates (owner's call); names still show through walls
   root.userData = {
@@ -727,6 +731,7 @@ export function createSeatedCharacter(key, seed = 0, { knees = 0.28 } = {}) {
   const pre = bent.map((b) => b.quaternion.clone());
   const turn = (b, ax, a) => { if (b && a) b.quaternion.multiply(_q.setFromAxisAngle(b.userData[ax], a)); };
   const wrap = new THREE.Group(); wrap.add(inst); inst.scale.multiplyScalar(k); wrap.rotation.y = Math.PI;
+  if (charGirth(key) !== 1) wrap.scale.set(charGirth(key), 1, charGirth(key));
   const root = new THREE.Group(); root.add(wrap);
   const ph = seed * 1.9;
   let lookNow = 0;

@@ -54,7 +54,8 @@ out; she watches you go from the doorway.
 ## Three places
 
 Pick one in the lobby, or Random: **Ashgrove Sanatorium**, the **Rajmahal Haveli** (a wedding haveli locked since
-1961) or **St. Agnes' School** (shut after the hostel fire of 1988). Each has its own rooms, furniture, notes, riddles
+1961), **St. Agnes' School** (shut after the hostel fire of 1988), the **Hotel Grand Regal** (room 41) or the **Old
+Kotwali Police Station** (cell 3). Each has its own rooms, furniture, notes, riddles
 and writing on the walls, and its own colours. Houses are compact, with several staircases between floors.
 
 ## Settings, voice chat, phones
@@ -122,6 +123,8 @@ breathing right behind you, and a white-and-red strobe when she catches you. If 
 | M | read the house blueprint (if you carry it); 1/2/3 change floor |
 | G | ping: mark a spot (or the item / her) for your friends |
 | V | push to talk (if push-to-talk is on in Settings) |
+| N | mute / unmute your microphone |
+| R | put a battery from your backpack into the torch |
 | F | flashlight (the battery drains; find spare batteries) |
 | E | take, read notes, place items on the star, hide in lockers, wardrobes and under beds, revive a friend (hold) |
 | Q | ring a **spirit bell**: freezes her for 6 seconds and scares the Crawler away |

@@ -83,6 +83,8 @@ export function buildWorld(scene, map) {
   const TINT = {
     haveli: { walls: [0xd9946a, 0xc98a5e, 0xe0a070], wood: 0x9a5a3a, tile: 0xc0a080, ceil: 0xc89a78 },
     school: { walls: [0xa8c8a8, 0xb8d0b8, 0x9cbca8], wood: 0xc8b49a, tile: 0xd8d8c8, ceil: 0xd0d8c8 },
+    hotel: { walls: [0xc8a8b8, 0xb8a0c0, 0xd0b0a0], wood: 0x8a4a3a, tile: 0xd0c0a8, ceil: 0xd8c8b0 },     // faded rose wallpaper, red carpet-wood
+    police: { walls: [0xb0b8c0, 0xa8b0a0, 0xc0c0b0], wood: 0x7a7a70, tile: 0xa8a8a0, ceil: 0xb8b8b0 },    // grey-blue government paint
   }[map.theme];
   if (TINT) {
     wallMats.forEach((m, k) => m.color.setHex(TINT.walls[k]));

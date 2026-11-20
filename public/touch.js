@@ -7,7 +7,7 @@ export function initTouch({ keys, settings, look, onPause, active }) {
   const root = document.createElement('div'); root.id = 'touch';
   const B = [ // [action, label, hold?]
     ['interact', 'E', true], ['jump', '⤒', false], ['crouch', 'C', 'toggle'], ['light', '🔦', false],
-    ['bell', '🔔', false], ['ping', '◆', false], ['map', '🗺', false], ['talk', '🎙', true], ['sprint', '»', 'toggle'],
+    ['bell', '🔔', false], ['ping', '◆', false], ['map', '🗺', false], ['talk', '🎙', true], ['sprint', '»', 'toggle'], ['reload', '🔋', false], ['mute', '🔇', false],
   ];
   root.innerHTML = `<div class="tstick"><i></i></div><div class="tlook"></div><div class="tbtns">${B.map(([a, l]) => `<button data-a="${a}">${l}</button>`).join('')}</div><button class="tpause">❚❚</button>`;
   document.body.appendChild(root);

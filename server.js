@@ -16,7 +16,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = 6;
 const TICK = 1 / 20;
 const COLORS = ['#e8c45a', '#5aa8e8', '#e85a8c', '#6ee08a', '#b48cff', '#ff9a4a'];
-const CHARS = ['adventurer', 'soldier', 'hoodie', 'woman', 'man', 'punk', 'casual', 'hooded'];
+const CHARS = ['adventurer', 'soldier', 'hoodie', 'woman', 'man', 'punk', 'casual', 'hooded', 'golu'];
 
 // ---------------- static files ----------------
 const MIME = {
@@ -106,7 +106,7 @@ function startGame() {
   game.talismans = m.talismans.map((t) => ({ ...t, taken: false }));
   // fewer supplies on harder difficulties (removed items start "taken")
   const thin = (list, mult) => list.map((b, i) => ({ ...b, taken: i >= Math.round(list.length * Math.min(1, mult)) }));
-  game.batteries = thin(m.batteries, d.items);
+  game.batteries = thin(m.batteries, Math.max(0.8, d.items)); // batteries stay plentiful even on Hard/Nightmare
   game.bells = thin(m.bells, d.items);
   game.bp = null; // everyone carries a blueprint now (M); the old single one on a table is gone
   { const types = Object.keys(GHOST_TYPES); game.ghostType = types[Math.floor(Math.random() * types.length)]; } // what she is tonight

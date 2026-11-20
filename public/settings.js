@@ -6,7 +6,7 @@ export const ACTIONS = [
   ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'], ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['sprint', 'Sprint', 'ShiftLeft'], ['crouch', 'Crouch', 'KeyC'], ['sneak', 'Sneak', 'ControlLeft'], ['jump', 'Jump', 'Space'],
   ['interact', 'Take / hide / read / revive', 'KeyE'], ['light', 'Flashlight', 'KeyF'], ['bell', 'Ring a spirit bell', 'KeyQ'],
-  ['ping', 'Ping (mark a spot)', 'KeyG'], ['map', 'Read the blueprint', 'KeyM'], ['talk', 'Push to talk', 'KeyV'],
+  ['ping', 'Ping (mark a spot)', 'KeyG'], ['map', 'Read the blueprint', 'KeyM'], ['talk', 'Push to talk', 'KeyV'], ['mute', 'Mute / unmute your mic', 'KeyN'], ['reload', 'Use a battery from your backpack', 'KeyR'],
 ];
 // fixed extra keys that always work as well (arrows, the right-hand modifiers)
 const ALT = { forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], sprint: ['ShiftRight'], sneak: ['ControlRight', 'AltLeft'] };
@@ -15,7 +15,7 @@ const ALT = { forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], ri
 const PHONE = typeof navigator !== 'undefined' && (/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ||
   (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches));
 const DEFAULTS = {
-  sens: 1.2, invertY: false, volume: 0.9, voiceVolume: 1, voice: true, pushToTalk: false, quality: PHONE ? 'low' : 'high', fov: 72, calm: false,
+  sens: 1.2, invertY: false, volume: 0.9, voiceVolume: 1, voice: true, micMuted: false, pushToTalk: false, quality: PHONE ? 'low' : 'high', fov: 72, calm: false,
   keys: Object.fromEntries(ACTIONS.map(([a, , k]) => [a, k])),
 };
 export const SETTINGS = load();
@@ -55,7 +55,8 @@ export function initSettings(apply) {
       </div>
       <div class="sc"><div class="st">Sound</div>
         <label>Master volume <input type="range" data-k="volume" min="0" max="1.2" step="0.05"><i></i></label>
-        <label class="ck"><input type="checkbox" data-k="voice"> Voice chat (friends near you)</label>
+        <label class="ck"><input type="checkbox" data-k="voice"> Voice chat on (hear and talk to your friends)</label>
+        <label class="ck"><input type="checkbox" data-k="micMuted"> Mute my microphone (key N)</label>
         <label class="ck"><input type="checkbox" data-k="pushToTalk"> Push to talk (otherwise your mic is always open)</label>
         <label>Voice volume <input type="range" data-k="voiceVolume" min="0" max="2" step="0.05"><i></i></label>
       </div>

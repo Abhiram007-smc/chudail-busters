@@ -9,7 +9,7 @@ import { AudioSys } from './audio.js';
 import { buildWorld, disposeScene } from './world.js';
 import { createMonster, createAvatar, createCrawler, loadModels, CHARACTERS, ensureChar, charLoaded, addXray, getModel } from './entities.js';
 import * as TX from './textures.js';
-import { SETTINGS, is, makeHeld, initSettings, openSettings, closeSettings, settingsOpen } from './settings.js';
+import { SETTINGS, saveSettings, is, makeHeld, initSettings, openSettings, closeSettings, settingsOpen } from './settings.js';
 import { newRun, track as trackAch, runSummary } from './achievements.js';
 import { createVoice } from './voice.js';
 import { IS_TOUCH, initTouch } from './touch.js';
@@ -197,7 +197,7 @@ function renderLobby() {
     const d = document.createElement('div');
     d.className = 'char' + (c.key === S.myChar ? ' mine' : '');
     const who = S.lobby.filter((p) => p.char === c.key).map((p) => `<span style="color:${p.color};background:${p.color}"></span>`).join('');
-    d.innerHTML = `<div class="who">${who}</div><img src="/img/chars/${c.key}.webp" alt=""><b>${c.name}</b><i>${c.role}</i>`;
+    d.innerHTML = `<div class="who">${who}</div><img src="/img/chars/${c.model || c.key}.webp" alt="" style="${c.girth ? `transform:scaleX(${c.girth})` : ''}"><b>${c.name}</b><i>${c.role}</i>`;
     d.onclick = () => { S.myChar = c.key; try { localStorage.setItem('hm_char', c.key); } catch {} send({ t: 'char', char: c.key }); ensureChar(c.key); audio.click(); };
     grid.appendChild(d);
   }
@@ -306,6 +306,13 @@ addEventListener('keydown', (e) => {
   if (is(e, 'light') && S.me?.alive && !S.me.escaped && !S.me.hidden) {
     if (S.me.battery > 0) { S.me.fl = !S.me.fl; audio.click(); }
   }
+  if (is(e, 'reload') && S.me?.alive && !S.me.escaped) {
+    if (!(S.me.spares > 0)) message('No batteries in your backpack.');
+    else if (S.me.battery > 90) message('Your torch is still nearly full.');
+    else { S.me.spares--; S.me.battery = Math.min(100, S.me.battery + 55); if (!S.me.hidden) S.me.fl = true; audio.pickupBattery(); message(`Battery +55% (${S.me.spares} left in your backpack)`); }
+    return;
+  }
+  if (is(e, 'mute')) { SETTINGS.micMuted = !SETTINGS.micMuted; saveSettings(); message(SETTINGS.micMuted ? '🔇 Your mic is muted (N to unmute)' : '🎙 Your mic is on (N to mute)'); return; }
   if (is(e, 'ping') && S.me?.alive && !S.me.escaped && !S.me.hidden) { doPing(); return; }
   if (is(e, 'map') && S.me?.alive && !S.me.escaped) { if (S.bpOpen) closeBlueprint(); else openBlueprint(S.me.L); return; } // everyone carries the blueprint
   if (S.bpOpen && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { openBlueprint({ Digit1: -1, Digit2: 0, Digit3: 1 }[e.code]); return; }
@@ -524,7 +531,7 @@ function buildGame(m) {
   S.pendingJoins = [];
   const mine = m.players.find((p) => p.id === S.myId) || { x: map.spawns[0][0], z: map.spawns[0][1] };
   S.me = {
-    x: mine.x, z: mine.z, yaw: Math.PI / 2, pitch: 0, vx: 0, vz: 0, stamina: 100, exhausted: false, battery: 100, fl: true,
+    x: mine.x, z: mine.z, yaw: Math.PI / 2, pitch: 0, vx: 0, vz: 0, stamina: 100, exhausted: false, battery: 100, spares: 0, fl: true,
     crouch: false, sneak: false, sprint: false, moving: false, eye: 1.62, bob: 0, stepAcc: 0, alive: true, escaped: false, breathT: 0, hidden: null, hideYaw: 0, bells: 0, revives: 0,
   };
   if (S.spectator) {
@@ -741,8 +748,9 @@ function onEvent(m) {
       } else if (kind === 'w' && m.by === S.myId) {
         S.me.bells = m.bells; audio.pickupBattery(); message(`Spirit bell (${m.bells}). Press Q to ring it and freeze her.`);
       } else if (kind === 'b' && m.by === S.myId) {
-        S.me.battery = Math.min(100, S.me.battery + 55); audio.pickupBattery(); message('Battery +55%');
-        if (!S.me.fl) S.me.fl = true;
+        // a fairly full torch: the battery goes in your backpack (up to 4) for later; otherwise straight in
+        if (S.me.battery > 45 && (S.me.spares || 0) < 4) { S.me.spares = (S.me.spares || 0) + 1; audio.pickupBattery(); message(`Battery in your backpack (${S.me.spares}/4). Press R to use one.`); }
+        else { S.me.battery = Math.min(100, S.me.battery + 55); audio.pickupBattery(); message('Battery +55%'); if (!S.me.fl) S.me.fl = true; }
       }
       break;
     }
@@ -1008,6 +1016,7 @@ function showBriefing(target = $('brief')) {
       <li>Hide in lockers, wardrobes and under beds, but never while she is watching.</li>
       <li><kbd>C</kbd> crouch with your light off and she can walk right past you. <kbd>Ctrl</kbd> sneak is silent. <kbd>Space</kbd> jump.</li>
       <li>Something lives on the ceiling once the first item is taken. Look up.</li>
+      <li>Batteries you don't need yet go in your <b>backpack</b> (up to 4): <kbd>R</kbd> puts one in; a dead torch takes one by itself.</li>
       <li>Everyone has a <b>blueprint of the house</b>: press <kbd>M</kbd> (1/2/3 for the floors). It does not show where you are.</li>
     </ul>`;
   target.style.display = 'block';
@@ -1684,7 +1693,14 @@ function updatePlayer(dt, t) {
   // breathing when tired
   if (me.stamina < 30) { me.breathT -= dt; if (me.breathT <= 0) { audio.breath(0.08 + (30 - me.stamina) / 200); me.breathT = 0.75; } }
   // flashlight battery
-  if (me.fl) { me.battery = Math.max(0, me.battery - dt * (100 / 200)); if (me.battery <= 0) { me.fl = false; audio.click(); message('Your flashlight died.', 'red'); } }
+  // a full torch lasts about 6 minutes (was 3 min 20 s); when it dies a spare from the backpack goes in by itself
+  if (me.fl) {
+    me.battery = Math.max(0, me.battery - dt * (100 / 360));
+    if (me.battery <= 0) {
+      if (me.spares > 0) { me.spares--; me.battery = 55; audio.pickupBattery(); message(`Swapped in a battery from your backpack (${me.spares} left).`); }
+      else { me.fl = false; audio.click(); message('Your flashlight died.', 'red'); }
+    }
+  }
   // escape
   if (S.exitOpen && me.L === 0 && Math.hypot(me.x - S.map.exit.x, me.z - S.map.exit.z) < 2.3 && t - S.escSent > 1) { S.escSent = t; send({ t: 'escape' }); }
   // network
@@ -2022,14 +2038,14 @@ function updateHUD(dt) {
   }
   const fl = (LEVEL_NAMES[S.camL] || '').toUpperCase() + (where ? `  ·  ${where}` : '');
   if ($('floorTag').textContent !== fl) $('floorTag').textContent = fl;
-  const hk = `${Math.round(me.battery)}|${Math.round(me.stamina)}|${me.exhausted}|${me.bells}|${me.revives}`;
+  const hk = `${Math.round(me.battery)}|${Math.round(me.stamina)}|${me.exhausted}|${me.bells}|${me.revives}|${me.spares || 0}`;
   if (hk !== hudKey) {
     hudKey = hk;
     $('battery').querySelector('i').style.width = Math.round(me.battery) + '%';
     $('battery').classList.toggle('low', me.battery < 20);
     $('stamina').querySelector('i').style.width = Math.round(me.stamina) + '%';
     $('stamina').querySelector('i').style.background = me.exhausted ? '#7a3020' : '';
-    $('bellCount').innerHTML = (me.bells > 0 ? `SPIRIT BELLS ×${me.bells}  [Q]<br>` : '') + (me.revives > 0 ? `<span style="color:#9fd8ff">AATMA CANDLES ×${me.revives}</span>` : '');
+    $('bellCount').innerHTML = (me.spares > 0 ? `<span style="color:#c8e080">🎒 BATTERIES ×${me.spares}  [R]</span><br>` : '') + (me.bells > 0 ? `SPIRIT BELLS ×${me.bells}  [Q]<br>` : '') + (me.revives > 0 ? `<span style="color:#9fd8ff">AATMA CANDLES ×${me.revives}</span>` : '');
   }
   hudT -= dt;
   if (hudT > 0) return;

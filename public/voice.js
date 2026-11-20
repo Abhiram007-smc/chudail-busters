@@ -1,6 +1,6 @@
 // Voice chat. Every player sends their microphone straight to every other player (WebRTC, the game server only
 // passes the connection messages along: {t:'rtc', to, data}). Every friend is heard at full volume wherever they are
-// (any distance, any floor); a 3D panner keeps the direction they are in.
+// (any distance, any floor, alive or dead); a 3D panner keeps the direction they are in.
 // The dead cannot talk to the living (but hear everyone). Talking loudly is noise SHE can hear ({t:'noise'}).
 // Needs a secure page (https or localhost) for the microphone.
 const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
@@ -76,7 +76,7 @@ export function createVoice({ audio, send, settings, myId }) {
   // every frame: where everyone's voice comes from, who may hear whom, push-to-talk, and loud talking
   function update(dt, { me, players, held, camL }) {
     if (local) {
-      const open = settings.voice && (!settings.pushToTalk || held('talk')) && me && me.alive !== false && !me.escaped;
+      const open = settings.voice && !settings.micMuted && (!settings.pushToTalk || held('talk')); // the dead and the escaped talk too
       for (const t of local.getAudioTracks()) t.enabled = !!open;
       localLevel = analyser && open ? rms(analyser, buf) : 0;
       if (localLevel > 0.12 && me && me.alive) { loudT += dt; if (loudT > 0.35 && performance.now() - lastNoise > 1200) { lastNoise = performance.now(); send({ t: 'noise' }); } }
@@ -90,7 +90,7 @@ export function createVoice({ audio, send, settings, myId }) {
       p.level = p.analyser ? rms(p.analyser, p.buf) : 0;
       const theyDead = !r.alive || r.escaped;
       let g = settings.voice ? settings.voiceVolume : 0;
-      if (theyDead && !iAmDead) g = 0; // the dead cannot talk to the living
+      // everyone hears everyone: alive, dead or escaped (owner's call)
       // friends are always heard at full volume, however far away or on whatever floor (owner's call); the panner only
       // keeps the direction they are in
       p.panner.refDistance = 1000;
@@ -101,7 +101,7 @@ export function createVoice({ audio, send, settings, myId }) {
   return {
     start, call, onSignal, drop, stop, update,
     speaking: (id) => (id === myId ? localLevel > 0.05 : (peers.get(id)?.level || 0) > 0.04),
-    status: () => failed || (local ? (settings.pushToTalk ? 'Voice: hold V to talk' : 'Voice: mic on') : ready ? 'Voice: listening only' : ''),
+    status: () => failed || (local ? (settings.micMuted ? '🔇 MIC MUTED (N to unmute)' : settings.pushToTalk ? '🎙 hold V to talk (N mutes)' : '🎙 MIC ON (N to mute)') : ready ? 'Voice: listening only' : ''),
     peers,
   };
 }
